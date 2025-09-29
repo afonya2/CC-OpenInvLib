@@ -20,6 +20,21 @@ local function copy(tbl, deep)
     end
     return out
 end
+local function includes(tbl, val)
+    for k, v in pairs(tbl) do
+        if v == val then return true, k end
+    end
+    return false
+end
+local function expect(fun, pos, arg, ...)
+    local typs = {...}
+    for k,v in ipairs(typs) do
+        if type(arg) == v then
+            return
+        end
+    end
+    error(fun .. ": bad argument #" .. pos .. " (expected " .. table.concat(typs, "/") .. ", got " .. type(arg) .. ")")
+end
 
 local storage = {}
 local itemCache = {}
@@ -55,8 +70,9 @@ local function scanStorages()
     end
     saveFile("openinvlib_data/item_cache.txt", itemCache)
 end
-
 local function scanStorage(strg)
+    expect("scanStorage", 1, strg, "string")
+
     local inv = wrappedStorages[strg]
     if not inv then return end
     if not itemCache[strg] then
@@ -92,5 +108,130 @@ end
 for k, v in pairs(wrappedStorages) do
     if itemCache[k] == nil then
         scanStorage(k)
+    else
+        local lastScanned = itemCache[k].lastScanned or 0
+        if os.epoch("utc") - lastScanned > 60000 then
+            scanStorage(k)
+        end
     end
 end
+
+local function createStorage(name, strgs)
+    expect("createStorage", 1, name, "string")
+    expect("createStorage", 2, strgs, "table")
+
+    for _, s in ipairs(storage) do
+        for _, ss in ipairs(strgs) do
+            if includes(s.storages, ss) then
+                return nil, "A storage with one or more of these peripherals already exists"
+            end
+        end
+    end
+    for _, ss in ipairs(strgs) do
+        if wrappedStorages[ss] == nil then
+            return nil, "One or more of these peripherals do not exist"
+        end
+    end
+    local newStorage = {
+        name = name,
+        storages = strgs,
+        partitions = {}
+    }
+    table.insert(storage, newStorage)
+    saveFile("openinvlib_data/storage.txt", storage)
+    return #storage
+end
+
+local function getStorage(id)
+    expect("getStorage", 1, id, "number")
+
+    if storage[id] == nil then return nil, "Storage not found" end
+    
+    local strapi = {}
+    strapi.getName = function()
+        return storage[id].name
+    end
+    strapi.setName = function(newName)
+        expect("setName", 1, newName, "string")
+        storage[id].name = newName
+        saveFile("openinvlib_data/storage.txt", storage)
+    end
+    strapi.getStorages = function()
+        return copy(storage[id].storages, true)
+    end
+    strapi.addStorage = function(strg)
+        expect("addStorage", 1, strg, "string")
+        for _, s in ipairs(storage) do
+            if includes(s.storages, strg) then
+                return nil, "A storage with this peripheral already exists"
+            end
+        end
+        if not wrappedStorages[strg] then
+            return nil, "Peripheral does not exist"
+        end
+        table.insert(storage[id].storages, strg)
+        saveFile("openinvlib_data/storage.txt", storage)
+    end
+    strapi.removeStorage = function(strg)
+        expect("removeStorage", 1, strg, "string")
+        local found, idx = includes(storage[id].storages, strg)
+        if not found then
+            return nil, "Peripheral not found in this storage"
+        end
+        table.remove(storage[id].storages, idx)
+        saveFile("openinvlib_data/storage.txt", storage)
+    end
+    strapi.getPartitions = function()
+        local out = {}
+        for k, v in pairs(storage[id].partitions) do
+            out[k] = {
+                name = v.name,
+                startPos = v.startPos,
+                endPos = v.endPos
+            }
+        end
+        return out
+    end
+    strapi.createPartition = function(name, startPos, endPos)
+        expect("createPartition", 1, name, "string")
+        expect("createPartition", 2, startPos, "number")
+        expect("createPartition", 3, endPos, "number")
+
+        if startPos < 1 or endPos < 1 or startPos > endPos then
+            return nil, "Invalid start or end position"
+        end
+        for _, p in pairs(storage[id].partitions) do
+            if not (endPos < p.startPos or startPos > p.endPos) then
+                return nil, "This partition overlaps with an existing partition"
+            end
+        end
+        table.insert(storage[id].partitions, {
+            name = name,
+            startPos = startPos,
+            endPos = endPos
+        })
+        saveFile("openinvlib_data/storage.txt", storage)
+        return #storage[id].partitions
+    end
+    strapi.getPartition = function(partId)
+        expect("getPartition", 1, partId, "number")
+
+        if not storage[id].partitions[partId] then
+            return nil, "Partition not found"
+        end
+        local parapi = {}
+    end
+    strapi.delete = function()
+        table.remove(storage, id)
+        saveFile("openinvlib_data/storage.txt", storage)
+    end
+
+    return strapi
+end
+
+_G.openInvLib = {
+    scanStorages = scanStorages,
+    scanStorage = scanStorage,
+    createStorage = createStorage,
+    getStorage = getStorage
+}
