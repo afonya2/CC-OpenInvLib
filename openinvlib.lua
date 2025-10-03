@@ -11,7 +11,7 @@ local function saveFile(filename, data)
 end
 local function copy(tbl, deep)
     local out = {}
-    for k,v in pairs(tbl) do
+    for k, v in pairs(tbl) do
         if deep and type(v) == "table" then
             out[k] = copy(v, deep)
         else
@@ -27,8 +27,8 @@ local function includes(tbl, val)
     return false
 end
 local function expect(fun, pos, arg, ...)
-    local typs = {...}
-    for k,v in ipairs(typs) do
+    local typs = { ... }
+    for k, v in ipairs(typs) do
         if type(arg) == v then
             return
         end
@@ -59,7 +59,7 @@ local function scanStorages()
         end
         local list = inv.list()
         local size = inv.size()
-        for i=1, size do
+        for i = 1, size do
             local itm = list[i]
             if itm then
                 local detail = inv.getItemDetail(i)
@@ -83,7 +83,7 @@ local function scanStorage(strg)
     end
     local list = inv.list()
     local size = inv.size()
-    for i=1, size do
+    for i = 1, size do
         local itm = list[i]
         if itm then
             local detail = inv.getItemDetail(i)
@@ -146,7 +146,7 @@ local function getStorage(id)
     expect("getStorage", 1, id, "number")
 
     if storage[id] == nil then return nil, "Storage not found" end
-    
+
     local strapi = {}
     strapi.getName = function()
         return storage[id].name
@@ -181,14 +181,51 @@ local function getStorage(id)
         table.remove(storage[id].storages, idx)
         saveFile("openinvlib_data/storage.txt", storage)
     end
+    strapi.getSize = function()
+        local size = 0
+        for _, s in ipairs(storage[id].storages) do
+            size = size + wrappedStorages[s].size()
+        end
+        return size
+    end
     strapi.getPartitions = function()
         local out = {}
-        for k, v in pairs(storage[id].partitions) do
-            out[k] = {
-                name = v.name,
-                startPos = v.startPos,
-                endPos = v.endPos
-            }
+        local size = strapi.getSize()
+        local freeS = 0
+        local i = 1
+        while i <= size do
+            local used = false
+            for _, p in ipairs(storage[id].partitions) do
+                if i >= p.startPos and i <= p.endPos then
+                    if freeS ~= 0 and freeS < i then
+                        table.insert(out, {
+                            name = "Unallocated",
+                            startPos = freeS,
+                            endPos = i - 1
+                        })
+                        freeS = 0
+                    end
+                    table.insert(out, {
+                        name = p.name,
+                        startPos = p.startPos,
+                        endPos = p.endPos
+                    })
+                    used = true
+                    i = p.endPos
+                    break
+                end
+            end
+            if (not used) and (freeS == 0) then
+                freeS = i
+            end
+            i = i + 1
+        end
+        if freeS ~= 0 and freeS <= size then
+            table.insert(out, {
+                name = "Unallocated",
+                startPos = freeS,
+                endPos = size
+            })
         end
         return out
     end
@@ -200,10 +237,14 @@ local function getStorage(id)
         if startPos < 1 or endPos < 1 or startPos > endPos then
             return nil, "Invalid start or end position"
         end
-        for _, p in pairs(storage[id].partitions) do
+        for _, p in ipairs(storage[id].partitions) do
             if not (endPos < p.startPos or startPos > p.endPos) then
                 return nil, "This partition overlaps with an existing partition"
             end
+        end
+        local maxSize = strapi.getSize()
+        if endPos > maxSize then
+            return nil, "End position exceeds storage size (" .. maxSize .. ")"
         end
         table.insert(storage[id].partitions, {
             name = name,
