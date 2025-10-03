@@ -94,13 +94,18 @@ local function scanStorage(strg)
     saveFile("openinvlib_data/item_cache.txt", itemCache)
 end
 
-local periphs = peripheral.getNames()
-for _, n in pairs(periphs) do
-    local t1, t2 = peripheral.getType(n)
-    if t2 == "inventory" then
-        wrappedStorages[n] = peripheral.wrap(n)
+local function scanPeripherals()
+    local newWrapped = {}
+    local periphs = peripheral.getNames()
+    for _, n in pairs(periphs) do
+        local t1, t2 = peripheral.getType(n)
+        if t2 == "inventory" then
+            newWrapped[n] = peripheral.wrap(n)
+        end
     end
+    wrappedStorages = newWrapped
 end
+scanPeripherals()
 
 if noCache then
     scanStorages()
@@ -146,6 +151,11 @@ local function getStorage(id)
     expect("getStorage", 1, id, "number")
 
     if storage[id] == nil then return nil, "Storage not found" end
+    for _, strg in ipairs(storage[id].storages) do
+        if wrappedStorages[strg] == nil then
+            return nil, "Peripheral " .. strg .. " is not available"
+        end
+    end
 
     local strapi = {}
     strapi.getName = function()
@@ -261,6 +271,68 @@ local function getStorage(id)
             return nil, "Partition not found"
         end
         local parapi = {}
+        parapi.getName = function()
+            return storage[id].partitions[partId].name
+        end
+        parapi.setName = function(newName)
+            expect("setName", 1, newName, "string")
+            storage[id].partitions[partId].name = newName
+            saveFile("openinvlib_data/storage.txt", storage)
+        end
+        parapi.getSize = function()
+            return storage[id].partitions[partId].endPos - storage[id].partitions[partId].startPos + 1
+        end
+        parapi.move = function(newStart)
+            expect("move", 1, newStart, "number")
+
+            local partSize = parapi.getSize()
+            local newEnd = newStart + partSize - 1
+            if newStart < 1 or newEnd < 1 or newStart > newEnd then
+                return nil, "Invalid start position"
+            end
+            for idx, p in ipairs(storage[id].partitions) do
+                if idx ~= partId then
+                    if not (newEnd < p.startPos or newStart > p.endPos) then
+                        return nil, "This partition overlaps with an existing partition"
+                    end
+                end
+            end
+            local maxSize = strapi.getSize()
+            if newEnd > maxSize then
+                return nil, "End position exceeds storage size (" .. maxSize .. ")"
+            end
+            storage[id].partitions[partId].startPos = newStart
+            storage[id].partitions[partId].endPos = newEnd
+            saveFile("openinvlib_data/storage.txt", storage)
+        end
+        parapi.resize = function(newSize)
+            expect("resize", 1, newSize, "number")
+            if newSize < 1 then
+                return nil, "Invalid size"
+            end
+            local newEnd = storage[id].partitions[partId].startPos + newSize - 1
+            for idx, p in ipairs(storage[id].partitions) do
+                if idx ~= partId then
+                    if not (newEnd < p.startPos or storage[id].partitions[partId].startPos > p.endPos) then
+                        return nil, "This partition overlaps with an existing partition"
+                    end
+                end
+            end
+            local maxSize = strapi.getSize()
+            if newEnd > maxSize then
+                return nil, "End position exceeds storage size (" .. maxSize .. ")"
+            end
+            storage[id].partitions[partId].endPos = newEnd
+            saveFile("openinvlib_data/storage.txt", storage)
+        end
+        parapi.getPositions = function()
+            return storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos
+        end
+        parapi.delete = function()
+            table.remove(storage[id].partitions, partId)
+            saveFile("openinvlib_data/storage.txt", storage)
+        end
+        return parapi
     end
     strapi.delete = function()
         table.remove(storage, id)
@@ -274,5 +346,6 @@ _G.openInvLib = {
     scanStorages = scanStorages,
     scanStorage = scanStorage,
     createStorage = createStorage,
+    scanPeripherals = scanPeripherals,
     getStorage = getStorage
 }
