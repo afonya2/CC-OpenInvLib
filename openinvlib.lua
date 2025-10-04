@@ -41,6 +41,59 @@ local function matchItem(itemA, itemB)
     end
     return false
 end
+function mysplit (inputstr, sep)
+    if sep == nil then
+            sep = "%s"
+    end
+    local t={}
+    for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+            table.insert(t, str)
+    end
+    return t
+end
+local function processQuery(query)
+    local out = {}
+    local ms1 = mysplit(query, "?")
+    out.itemId = ms1[1]
+    out.raw_query = ms1[2]
+    out.query = {}
+    local ms2 = mysplit(ms1[2] or "", "&")
+    for k,v in ipairs(ms2) do
+        local ms3 = mysplit(v, "=")
+        if ms3[2] == nil then
+            ms3[2] = true
+        end
+        out.query[ms3[1]] = ms3[2]
+    end
+    if ms1[2] == nil then
+        out.query = nil
+    end
+    return out
+end
+local compressionInfo = {
+    ["minecraft:redstone_block?displayName=Block of Redstone"] = {
+        item = "minecraft:redstone?displayName=Redstone Dust",
+        ratio = 9,
+        craft = {
+            items = {
+                x = "minecraft:redstone?displayName=Redstone Dust"
+            },
+            pattern = {
+                {"x", "x", "x"},
+                {"x", "x", "x"},
+                {"x", "x", "x"}
+            }
+        },
+        reverseCraft = {
+            items = {
+                x = "minecraft:redstone_block?displayName=Block of Redstone"
+            },
+            pattern = {
+                {"x"}
+            }
+        }
+    }
+}
 
 local storage = {}
 local itemCache = {}
@@ -253,10 +306,11 @@ local function getStorage(id)
         end
         return out
     end
-    strapi.createPartition = function(name, startPos, endPos)
+    strapi.createPartition = function(name, startPos, endPos, isCompressed)
         expect("createPartition", 1, name, "string")
         expect("createPartition", 2, startPos, "number")
         expect("createPartition", 3, endPos, "number")
+        expect("createPartition", 4, isCompressed, "boolean", "nil")
 
         if startPos < 1 or endPos < 1 or startPos > endPos then
             return nil, "Invalid start or end position"
@@ -273,7 +327,8 @@ local function getStorage(id)
         table.insert(storage[id].partitions, {
             name = name,
             startPos = startPos,
-            endPos = endPos
+            endPos = endPos,
+            isCompressed = isCompressed or false
         })
         saveFile("openinvlib_data/storage.txt", storage)
         return #storage[id].partitions
@@ -343,7 +398,57 @@ local function getStorage(id)
             return storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos
         end
         parapi.list = function()
-            
+            local base = strapi._internal.list()
+            local out = {}
+            for i = storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
+                out[i] = base[i]
+            end
+            return out
+        end
+        parapi.listItems = function(noUncompressed)
+            expect("listItems", 1, noUncompressed, "boolean", "nil")
+
+            local base = parapi.list()
+            local out = {}
+            for i = storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
+                local item = base[i]
+                if item then
+                    local itemQuery = item.name
+                    if item.nbt then
+                        itemQuery = itemQuery .. "?nbt=" .. item.nbt
+                    end
+                    if item.displayName then
+                        if item.nbt then
+                            itemQuery = itemQuery .. "&displayName=" .. item.displayName
+                        else
+                            itemQuery = itemQuery .. "?displayName=" .. item.displayName
+                        end
+                    end
+                    if out[itemQuery] == nil then
+                        out[itemQuery] = copy(item)
+                    else
+                        out[itemQuery].count = out[itemQuery].count + item.count
+                    end
+                    if compressionInfo[itemQuery] then
+                        if not noUncompressed then
+                            local cInfo = compressionInfo[itemQuery]
+                            if out[cInfo.item] == nil then
+                                local proc = processQuery(cInfo.item)
+                                out[cInfo.item] = {
+                                    name = proc.itemId,
+                                    count = item.count * cInfo.ratio,
+                                    maxCount = item.maxCount,
+                                    displayName = proc.query and proc.query.displayName or nil,
+                                    nbt = proc.query and proc.query.nbt or nil
+                                }
+                            else
+                                out[cInfo.item].count = out[cInfo.item].count + (item.count * cInfo.ratio)
+                            end
+                        end
+                    end
+                end
+            end
+            return out
         end
         parapi.delete = function()
             table.remove(storage[id].partitions, partId)
