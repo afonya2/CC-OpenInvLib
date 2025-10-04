@@ -429,7 +429,7 @@ local function getStorage(id)
                     else
                         out[itemQuery].count = out[itemQuery].count + item.count
                     end
-                    if compressionInfo[itemQuery] then
+                    if compressionInfo[itemQuery] and storage[id].partitions[partId].isCompressed then
                         if not noUncompressed then
                             local cInfo = compressionInfo[itemQuery]
                             if out[cInfo.item] == nil then
@@ -455,6 +455,9 @@ local function getStorage(id)
         parapi._internal = {}
         parapi._internal.size = function()
             return parapi.getSize()
+        end
+        parapi._internal.list = function()
+            return parapi.list()
         end
         parapi._internal.getRealSlot = function(slot)
             expect("getRealSlot", 1, slot, "number")
@@ -496,6 +499,44 @@ local function getStorage(id)
                 return nil, err
             end
         end
+        parapi._internal.pullItems = function(fromName, fromSlot, limit, toSlot)
+            expect("pullItems", 1, fromName, "string")
+            expect("pullItems", 2, fromSlot, "number")
+            expect("pullItems", 3, limit, "number", "nil")
+            expect("pullItems", 4, toSlot, "number", "nil")
+
+            local fromInv = wrappedStorages[fromName]
+            if not fromInv then
+                return nil, "Peripheral is not available"
+            end
+            local item = itemCache[fromName].items[fromSlot]
+            if not item then
+                return 0
+            end
+            item = copy(item)
+            local baseToTransfer = math.min(limit or item.count, item.count)
+            local toTransfer = math.min(limit or item.count, item.count)
+            if toSlot then
+                local chest, realToSlot, slotInStorage, err = parapi._internal.getRealSlot(toSlot)
+                if chest then
+                    return strapi._internal.pullItems(fromName, fromSlot, toTransfer, slotInStorage)
+                else
+                    return nil, err
+                end
+            end
+            local ls = strapi._internal.list()
+            for i = storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
+                local titem = ls[i]
+                if (titem == nil) or (matchItem(titem, item) and titem.count < titem.maxCount) then
+                    local change = strapi._internal.pullItems(fromName, fromSlot, toTransfer, i)
+                    toTransfer = toTransfer - change
+                    if toTransfer <= 0 then
+                        return baseToTransfer
+                    end
+                end
+            end
+            return baseToTransfer - toTransfer
+        end
         parapi.delete = function()
             table.remove(storage[id].partitions, partId)
             saveFile("openinvlib_data/storage.txt", storage)
@@ -503,9 +544,6 @@ local function getStorage(id)
         return parapi
     end
     strapi._internal = {}
-    strapi._internal.size = function()
-        return strapi.getSize()
-    end
     strapi._internal.list = function()
         local out = {}
         local offset = 0
@@ -575,6 +613,7 @@ local function getStorage(id)
                 saveFile("openinvlib_data/item_cache.txt", itemCache)
                 return change
             else
+                local baseToTransfer = math.min(limit or item.count, item.count)
                 local toTransfer = math.min(limit or item.count, item.count)
                 for i = 1, itemCache[toName].size do
                     local titem = itemCache[toName].items[i]
@@ -592,12 +631,12 @@ local function getStorage(id)
                         toTransfer = toTransfer - change
                         if toTransfer <= 0 then
                             saveFile("openinvlib_data/item_cache.txt", itemCache)
-                            return limit or item.count
+                            return baseToTransfer
                         end
                     end
                 end
                 saveFile("openinvlib_data/item_cache.txt", itemCache)
-                return (limit or item.count) - toTransfer
+                return baseToTransfer - toTransfer
             end
         else
             return nil, err
@@ -618,6 +657,7 @@ local function getStorage(id)
             return 0
         end
         item = copy(item)
+        local baseToTransfer = math.min(limit or item.count, item.count)
         local toTransfer = math.min(limit or item.count, item.count)
         if toSlot then
             local chest, realToSlot, err = strapi._internal.getRealSlot(toSlot)
@@ -657,13 +697,13 @@ local function getStorage(id)
                     toTransfer = toTransfer - change
                     if toTransfer <= 0 then
                         saveFile("openinvlib_data/item_cache.txt", itemCache)
-                        return limit or item.count
+                        return baseToTransfer
                     end
                 end
             end
         end
         saveFile("openinvlib_data/item_cache.txt", itemCache)
-        return (limit or item.count) - toTransfer
+        return baseToTransfer - toTransfer
     end
     strapi.delete = function()
         table.remove(storage, id)
