@@ -352,7 +352,6 @@ local function getStorage(id)
         return parapi
     end
     strapi._internal = {}
-    -- TODO: make it change the itemCache
     strapi._internal.size = function()
         return strapi.getSize()
     end
@@ -406,7 +405,49 @@ local function getStorage(id)
         local chest, realFromSlot, err = strapi._internal.getRealSlot(fromSlot)
         if chest then
             local wrappedFrom = wrappedStorages[chest]
-            return wrappedFrom.pushItems(toName, realFromSlot, limit, toSlot)
+            local item = itemCache[chest].items[realFromSlot]
+            if not item then
+                return 0
+            end
+            item = copy(item)
+            if toSlot then
+                local change = wrappedFrom.pushItems(toName, realFromSlot, limit, toSlot)
+                if itemCache[toName].items[toSlot] == nil then
+                    itemCache[toName].items[toSlot] = toInv.getItemDetail(toSlot)
+                else
+                    itemCache[toName].items[toSlot].count = itemCache[toName].items[toSlot].count + change
+                end
+                itemCache[chest].items[realFromSlot].count = itemCache[chest].items[realFromSlot].count - change
+                if itemCache[chest].items[realFromSlot].count <= 0 then
+                    itemCache[chest].items[realFromSlot] = nil
+                end
+                saveFile("openinvlib_data/item_cache.txt", itemCache)
+                return change
+            else
+                local toTransfer = math.min(limit or item.count, item.count)
+                for i = 1, itemCache[toName].size do
+                    local titem = itemCache[toName].items[i]
+                    if (titem == nil) or (matchItem(titem, item) and titem.count < titem.maxCount) then
+                        local change = wrappedFrom.pushItems(toName, realFromSlot, toTransfer, i)
+                        if itemCache[toName].items[i] == nil then
+                            itemCache[toName].items[i] = toInv.getItemDetail(i)
+                        else
+                            itemCache[toName].items[i].count = itemCache[toName].items[i].count + change
+                        end
+                        itemCache[chest].items[realFromSlot].count = itemCache[chest].items[realFromSlot].count - change
+                        if itemCache[chest].items[realFromSlot].count <= 0 then
+                            itemCache[chest].items[realFromSlot] = nil
+                        end
+                        toTransfer = toTransfer - change
+                        if toTransfer <= 0 then
+                            saveFile("openinvlib_data/item_cache.txt", itemCache)
+                            return limit or item.count
+                        end
+                    end
+                end
+                saveFile("openinvlib_data/item_cache.txt", itemCache)
+                return (limit or item.count) - toTransfer
+            end
         else
             return nil, err
         end
@@ -425,12 +466,24 @@ local function getStorage(id)
         if not item then
             return 0
         end
+        item = copy(item)
         local toTransfer = math.min(limit or item.count, item.count)
         if toSlot then
             local chest, realToSlot, err = strapi._internal.getRealSlot(toSlot)
             if chest then
                 local wrappedTo = wrappedStorages[chest]
-                return wrappedTo.pullItems(fromName, fromSlot, toTransfer, realToSlot)
+                local change = wrappedTo.pullItems(fromName, fromSlot, toTransfer, realToSlot)
+                if itemCache[chest].items[realToSlot] == nil then
+                    itemCache[chest].items[realToSlot] = wrappedTo.getItemDetail(realToSlot)
+                else
+                    itemCache[chest].items[realToSlot].count = itemCache[chest].items[realToSlot].count + change
+                end
+                itemCache[fromName].items[fromSlot].count = itemCache[fromName].items[fromSlot].count - change
+                if itemCache[fromName].items[fromSlot].count <= 0 then
+                    itemCache[fromName].items[fromSlot] = nil
+                end
+                saveFile("openinvlib_data/item_cache.txt", itemCache)
+                return change
             else
                 return nil, err
             end
@@ -438,15 +491,27 @@ local function getStorage(id)
         for _, s in ipairs(storage[id].storages) do
             for i = 1, itemCache[s].size do
                 local titem = itemCache[s].items[i]
-                if (itemCache[s].items[i] == nil) or (matchItem(titem, item) and titem.count < titem.maxCount) then
+                if (titem == nil) or (matchItem(titem, item) and titem.count < titem.maxCount) then
                     local wrappedTo = wrappedStorages[s]
-                    toTransfer = toTransfer - wrappedTo.pullItems(fromName, fromSlot, toTransfer, i)
+                    local change = wrappedTo.pullItems(fromName, fromSlot, toTransfer, i)
+                    if itemCache[s].items[i] == nil then
+                        itemCache[s].items[i] = wrappedTo.getItemDetail(i)
+                    else
+                        itemCache[s].items[i].count = itemCache[s].items[i].count + change
+                    end
+                    itemCache[fromName].items[fromSlot].count = itemCache[fromName].items[fromSlot].count - change
+                    if itemCache[fromName].items[fromSlot].count <= 0 then
+                        itemCache[fromName].items[fromSlot] = nil
+                    end
+                    toTransfer = toTransfer - change
                     if toTransfer <= 0 then
+                        saveFile("openinvlib_data/item_cache.txt", itemCache)
                         return limit or item.count
                     end
                 end
             end
         end
+        saveFile("openinvlib_data/item_cache.txt", itemCache)
         return (limit or item.count) - toTransfer
     end
     strapi.delete = function()
