@@ -71,6 +71,8 @@ local function scanStorages()
             if itm then
                 local detail = inv.getItemDetail(i)
                 itemCache[n].items[i] = detail
+            else
+                itemCache[n].items[i] = nil
             end
         end
         itemCache[n].lastScanned = os.epoch("utc")
@@ -97,6 +99,8 @@ local function scanStorage(strg)
         if itm then
             local detail = inv.getItemDetail(i)
             itemCache[strg].items[i] = detail
+        else
+            itemCache[strg].items[i] = nil
         end
     end
     itemCache[strg].lastScanned = os.epoch("utc")
@@ -348,6 +352,7 @@ local function getStorage(id)
         return parapi
     end
     strapi._internal = {}
+    -- TODO: make it change the itemCache
     strapi._internal.size = function()
         return strapi.getSize()
     end
@@ -406,44 +411,6 @@ local function getStorage(id)
             return nil, err
         end
     end
-    strapi._internal.getFreeSlotsFor = function(item, count)
-        expect("getFreeSlotsFor", 1, item, "table")
-        expect("getFreeSlotsFor", 2, count, "number")
-
-        local out = {}
-        local offset = 0
-        local rem = count
-        for _, s in ipairs(storage[id].storages) do
-            for p, i in pairs(itemCache[s].items) do
-                if matchItem(i, item) and i.count < i.maxCount then
-                    table.insert(out, offset + p)
-                    rem = rem - (i.maxCount - i.count)
-                    if rem <= 0 then
-                        return out
-                    end
-                end
-            end
-            offset = offset + itemCache[s].size
-        end
-        if rem > 0 then
-            offset = 0
-            for _, s in ipairs(storage[id].storages) do
-                for i = 1, itemCache[s].size do
-                    if itemCache[s].items[i] == nil then
-                        table.insert(out, offset + i)
-                        rem = rem - item.maxCount
-                        if rem <= 0 then
-                            return out
-                        end
-                    end
-                end
-                offset = offset + itemCache[s].size
-            end
-            if rem > 0 then
-                return nil, "Not enough space available"
-            end
-        end
-    end
     strapi._internal.pullItems = function(fromName, fromSlot, limit, toSlot)
         expect("pullItems", 1, fromName, "string")
         expect("pullItems", 2, fromSlot, "number")
@@ -454,27 +421,33 @@ local function getStorage(id)
         if not fromInv then
             return nil, "Peripheral is not available"
         end
-        local item = fromInv.getItemDetail(fromSlot)
+        local item = itemCache[fromName].items[fromSlot]
         if not item then
             return 0
         end
-        local freeSlots, err = strapi._internal.getFreeSlotsFor(item, limit or item.count)
-        if freeSlots then
-            local totalMoved = 0
-            for _, v in ipairs(freeSlots) do
-                local chest, realToSlot, err = strapi._internal.getRealSlot(v)
-                if chest then
-                    local wrappedTo = wrappedStorages[chest]
-                    local moved = wrappedTo.pullItems(fromName, fromSlot, limit or item.count, realToSlot)
-                    totalMoved = totalMoved + moved
-                else
-                    return nil, err
+        local toTransfer = math.min(limit or item.count, item.count)
+        if toSlot then
+            local chest, realToSlot, err = strapi._internal.getRealSlot(toSlot)
+            if chest then
+                local wrappedTo = wrappedStorages[chest]
+                return wrappedTo.pullItems(fromName, fromSlot, toTransfer, realToSlot)
+            else
+                return nil, err
+            end
+        end
+        for _, s in ipairs(storage[id].storages) do
+            for i = 1, itemCache[s].size do
+                local titem = itemCache[s].items[i]
+                if (itemCache[s].items[i] == nil) or (matchItem(titem, item) and titem.count < titem.maxCount) then
+                    local wrappedTo = wrappedStorages[s]
+                    toTransfer = toTransfer - wrappedTo.pullItems(fromName, fromSlot, toTransfer, i)
+                    if toTransfer <= 0 then
+                        return limit or item.count
+                    end
                 end
             end
-            return totalMoved
-        else
-            return nil, err
         end
+        return (limit or item.count) - toTransfer
     end
     strapi.delete = function()
         table.remove(storage, id)
