@@ -439,16 +439,62 @@ local function getStorage(id)
                                     count = item.count * cInfo.ratio,
                                     maxCount = item.maxCount,
                                     displayName = proc.query and proc.query.displayName or nil,
-                                    nbt = proc.query and proc.query.nbt or nil
+                                    nbt = proc.query and proc.query.nbt or nil,
+                                    containsCompressed = true
                                 }
                             else
                                 out[cInfo.item].count = out[cInfo.item].count + (item.count * cInfo.ratio)
+                                out[cInfo.item].containsCompressed = true
                             end
                         end
                     end
                 end
             end
             return out
+        end
+        parapi._internal = {}
+        parapi._internal.size = function()
+            return parapi.getSize()
+        end
+        parapi._internal.getRealSlot = function(slot)
+            expect("getRealSlot", 1, slot, "number")
+
+            if slot < 1 or slot > parapi.getSize() then
+                return nil, nil, nil, "Slot out of range"
+            end
+            local ret = {strapi._internal.getRealSlot(slot + storage[id].partitions[partId].startPos - 1)}
+            if ret[3] ~= nil then
+                return ret[1], ret[2], ret[3]
+            end
+            table.insert(ret, slot + storage[id].partitions[partId].startPos - 1)
+            return table.unpack(ret)
+        end
+        parapi._internal.getItemDetail = function(slot)
+            expect("getItemDetail", 1, slot, "number")
+
+            local chest, realSlot, err = parapi._internal.getRealSlot(slot)
+            if chest then
+                return itemCache[chest].items[realSlot]
+            else
+                return nil, err
+            end
+        end
+        parapi._internal.pushItems = function(toName, fromSlot, limit, toSlot)
+            expect("pushItems", 1, toName, "string")
+            expect("pushItems", 2, fromSlot, "number")
+            expect("pushItems", 3, limit, "number", "nil")
+            expect("pushItems", 4, toSlot, "number", "nil")
+
+            local toInv = wrappedStorages[toName]
+            if not toInv then
+                return nil, "Peripheral is not available"
+            end
+            local chest, realFromSlot, slotInStorage, err = parapi._internal.getRealSlot(fromSlot)
+            if chest then
+                return strapi._internal.pushItems(toName, slotInStorage, limit, toSlot)
+            else
+                return nil, err
+            end
         end
         parapi.delete = function()
             table.remove(storage[id].partitions, partId)
