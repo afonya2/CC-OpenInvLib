@@ -70,6 +70,36 @@ local function processQuery(query)
     end
     return out
 end
+local function matchItemQuery(item, query)
+    local pq = processQuery(query)
+    if item.name ~= pq.itemId then
+        return false
+    end
+    if pq.query then
+        local keyed = {}
+        local function convertToKeys(tbl, prefix)
+            local i = 1
+            for k, v in pairs(tbl) do
+                if type(v) == "table" then
+                    keyed[prefix .. k] = convertToKeys(v, k .. ".")
+                else
+                    keyed[prefix .. k] = v
+                end
+                i = i + 1
+                if i > 50 then
+                    break
+                end
+            end
+        end
+        convertToKeys(item, "")
+        for k, v in pairs(pq.query) do
+            if keyed[k] ~= v then
+                return false
+            end
+        end
+    end
+    return true
+end
 local compressionInfo = {
     ["minecraft:redstone_block?displayName=Block of Redstone"] = {
         item = "minecraft:redstone?displayName=Redstone Dust",
@@ -428,6 +458,11 @@ local function getStorage(id)
                         out[itemQuery] = copy(item)
                     else
                         out[itemQuery].count = out[itemQuery].count + item.count
+                        for k,v in pairs(item) do
+                            if out[itemQuery][k] == nil then
+                                out[itemQuery][k] = v
+                            end
+                        end
                     end
                     if compressionInfo[itemQuery] and storage[id].partitions[partId].isCompressed then
                         if not noUncompressed then
@@ -449,6 +484,47 @@ local function getStorage(id)
                         end
                     end
                 end
+            end
+            return out
+        end
+        parapi.getItemInfo = function(query, noUncompressed)
+            expect("getItemInfo", 1, query, "string")
+
+            local list = parapi.listItems(noUncompressed)
+            local out = {}
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    table.insert(out, copy(v))
+                end
+            end
+            return out
+        end
+        parapi.getItemCount = function(query, noUncompressed)
+            expect("getItemCount", 1, query, "string")
+
+            local list = parapi.listItems(noUncompressed)
+            local count = 0
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    count = count + v.count
+                end
+            end
+            return count
+        end
+        parapi.getUsage = function()
+            local out = {
+                usedSlots = 0,
+                totalSlots = parapi.getSize(),
+                fullSlots = 0,
+                totalItems = 0
+            }
+            local list = parapi.list()
+            for k, v in pairs(list) do
+                out.usedSlots = out.usedSlots + 1
+                if v.count >= v.maxCount then
+                    out.fullSlots = out.fullSlots + 1
+                end
+                out.totalItems = out.totalItems + v.count
             end
             return out
         end
