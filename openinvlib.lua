@@ -100,6 +100,20 @@ local function matchItemQuery(item, query)
     end
     return true
 end
+local function getItemQuery(item)
+    local itemQuery = item.name
+    if item.nbt then
+        itemQuery = itemQuery .. "?nbt=" .. item.nbt
+    end
+    if item.displayName then
+        if item.nbt then
+            itemQuery = itemQuery .. "&displayName=" .. item.displayName
+        else
+            itemQuery = itemQuery .. "?displayName=" .. item.displayName
+        end
+    end
+    return itemQuery
+end
 local compressionInfo = {
     ["minecraft:redstone_block?displayName=Block of Redstone"] = {
         item = "minecraft:redstone?displayName=Redstone Dust",
@@ -134,6 +148,18 @@ end
 if fs.exists("openinvlib_data/item_cache.txt") then
     itemCache = loadFile("openinvlib_data/item_cache.txt")
     noCache = false
+end
+local turtleName = nil
+if turtle then
+    for k,v in ipairs({"top", "right", "left", "bottom", "behind", "front"}) do
+        local t = peripheral.getType(v)
+        local wrp = peripheral.wrap(v)
+        if t == "modem" then
+            if not wrp.isWireless() then
+                turtleName = wrp.getNameLocal()
+            end
+        end
+    end
 end
 
 local wrappedStorages = {}
@@ -199,6 +225,10 @@ local function scanPeripherals()
         if t2 == "inventory" then
             newWrapped[n] = peripheral.wrap(n)
         end
+    end
+    if turtleName then
+        -- TEMPORARY FIX --
+        newWrapped[turtleName] = {}
     end
     wrappedStorages = newWrapped
 end
@@ -431,7 +461,7 @@ local function getStorage(id)
             local base = strapi._internal.list()
             local out = {}
             for i = storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
-                out[i] = base[i]
+                out[i - storage[id].partitions[partId].startPos + 1] = base[i]
             end
             return out
         end
@@ -440,20 +470,10 @@ local function getStorage(id)
 
             local base = parapi.list()
             local out = {}
-            for i = storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
+            for i = 1, parapi.getSize() do
                 local item = base[i]
                 if item then
-                    local itemQuery = item.name
-                    if item.nbt then
-                        itemQuery = itemQuery .. "?nbt=" .. item.nbt
-                    end
-                    if item.displayName then
-                        if item.nbt then
-                            itemQuery = itemQuery .. "&displayName=" .. item.displayName
-                        else
-                            itemQuery = itemQuery .. "?displayName=" .. item.displayName
-                        end
-                    end
+                    local itemQuery = getItemQuery(item)
                     if out[itemQuery] == nil then
                         out[itemQuery] = copy(item)
                     else
@@ -527,6 +547,121 @@ local function getStorage(id)
                 out.totalItems = out.totalItems + v.count
             end
             return out
+        end
+        parapi.canImport = function(query, limit)
+            expect("canImport", 1, query, "string")
+            expect("canImport", 2, limit, "number", "nil")
+
+            local list = parapi.list()
+            local toTransfer = limit or (2^40)
+            local transferred = 0
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    if v.count < v.maxCount then
+                        toTransfer = toTransfer - (v.maxCount - v.count)
+                        transferred = transferred + (v.maxCount - v.count)
+                        if toTransfer <= 0 then
+                            return transferred
+                        end
+                    end
+                end
+            end
+            return transferred
+        end
+        parapi.craft = function(key, pattern, outcome, outcomeCount, count)
+            if (not turtle) or (not turtle.craft) then
+                return nil, "Crafting is only supported on crafty turtles"
+            end
+            if not turtleName then
+                return nil, "A wired modem must be placed around the turtle"
+            end
+            for i = 1, 16 do
+                if turtle.getItemCount(i) > 0 then
+                    return nil, "The turtle's inventory must be empty"
+                end
+            end
+            expect("craft", 1, key, "table")
+            expect("craft", 2, pattern, "table")
+            expect("craft", 3, outcome, "string")
+            expect("craft", 4, outcomeCount, "number")
+            expect("craft", 5, count, "number", "nil")
+
+            count = count or 1
+
+            if parapi.canImport(outcome, outcomeCount * count) < count then
+                return nil, "Not enough space to import crafted items"
+            end
+            local neededItems = {}
+            for i = 1, 3 do
+                if pattern[i] then
+                    for j = 1, 3 do
+                        if pattern[i][j] then
+                            local item = key[pattern[i][j]]
+                            if not item then
+                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
+                            end
+                            if neededItems[item] then
+                                neededItems[item] = neededItems[item] + count
+                            else
+                                neededItems[item] = count
+                            end
+                        end
+                    end
+                end
+            end
+            for k, v in pairs(neededItems) do
+                local ic = parapi.getItemCount(k, true)
+                if ic < v then
+                    return nil, "Not enough of item: " .. k .. " (need " .. v-ic .. " more)"
+                end
+            end
+            for i = 1, 3 do
+                if pattern[i] then
+                    for j = 1, 3 do
+                        if pattern[i][j] then
+                            local item = key[pattern[i][j]]
+                            if not item then
+                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
+                            end
+                            print(parapi.exportItems(item, turtleName, true, count))
+                        end
+                    end
+                end
+            end
+            local ok, err = turtle.craft()
+            if not ok then
+                return nil, err
+            end
+        end
+        parapi.exportItems = function(query, toName, noCompression, limit, toSlot)
+            expect("exportItems", 1, query, "string")
+            expect("exportItems", 2, toName, "string")
+            expect("exportItems", 3, noCompression, "boolean", "nil")
+            expect("exportItems", 4, limit, "number", "nil")
+            expect("exportItems", 5, toSlot, "number", "nil")
+
+            local toInv = wrappedStorages[toName]
+            if not toInv then
+                return nil, "Peripheral is not available"
+            end
+            local list = parapi.list()
+            local toTransfer = limit or (2^40)
+            local changed = 0
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    local change, err = parapi._internal.pushItems(toName, k, toTransfer, toSlot)
+                    if change == nil then
+                        return nil, err
+                    end
+                    toTransfer = toTransfer - change
+                    changed = changed + change
+                --[[elseif compressionInfo[getItemQuery(v)] and storage[id].partitions[partId].isCompressed then
+                    if not noCompression then
+                        
+                    end]]
+                end
+            end
+            return changed
         end
         parapi._internal = {}
         parapi._internal.size = function()
