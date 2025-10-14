@@ -100,6 +100,24 @@ local function matchItemQuery(item, query)
     end
     return true
 end
+local function matchQueries(base, check)
+    local q1 = processQuery(base)
+    local q2 = processQuery(check)
+    if q1.itemId ~= q2.itemId then
+        return false
+    end
+    if q2.query then
+        if not q1.query then
+            return false
+        end
+        for k, v in pairs(q2.query) do
+            if q1.query[k] ~= v then
+                return false
+            end
+        end
+    end
+    return true
+end
 local function getItemQuery(item)
     local itemQuery = item.name
     if item.nbt then
@@ -621,6 +639,9 @@ local function getStorage(id)
             expect("craft", 4, outcomeCount, "number")
             expect("craft", 5, count, "number", "nil")
 
+            if (type(count) == "number") and (count == 0) then
+                return true
+            end
             count = count or 1
 
             if parapi.canImport(outcome, outcomeCount * count) < count then
@@ -671,10 +692,12 @@ local function getStorage(id)
             if not ok then
                 return nil, err
             end
+            print("OC: " .. outcomeCount * count)
             local ok2,err2 = parapi.importItems(outcome, turtleName, true, outcomeCount * count)
             if not ok2 then
                 return nil, err2
             end
+            return true
         end
         parapi.exportItems = function(query, toName, noCompression, limit, toSlot)
             expect("exportItems", 1, query, "string")
@@ -698,10 +721,29 @@ local function getStorage(id)
                     end
                     toTransfer = toTransfer - change
                     changed = changed + change
-                --[[elseif compressionInfo[getItemQuery(v)] and storage[id].partitions[partId].isCompressed then
-                    if not noCompression then
-                        
-                    end]]
+                end
+            end
+            if (toTransfer > 0) and (not noCompression) and storage[id].partitions[partId].isCompressed then
+                list = parapi.list()
+                for k, v in pairs(list) do
+                    if compressionInfo[getItemQuery(v)] then
+                        local cInfo = compressionInfo[getItemQuery(v)]
+                        if cInfo then
+                            if matchQueries(cInfo.item, query) then
+                                local crafty = math.min(parapi.getItemCount(getItemQuery(v), true), math.ceil(toTransfer / cInfo.ratio))
+                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty)
+                                print(crafty)
+                                print(err)
+                                if ok then
+                                    local c, err2 = parapi.exportItems(query, toName, true, crafty * cInfo.ratio, toSlot)
+                                    if not c then
+                                        return nil, err2
+                                    end
+                                    toTransfer = toTransfer - c
+                                end
+                            end
+                        end
+                    end
                 end
             end
             return changed
@@ -721,6 +763,8 @@ local function getStorage(id)
             local list = fromInv.list()
             local strList = parapi.list()
             local toTransfer = math.min(canImport, limit or (2^40))
+            print("TRANSFER: " .. toTransfer)
+            -- TOFIX: OC: 9; TRANSFER: 9; REMAIN: 8
             local changed = 0
             for k,_ in pairs(list) do
                 local realV = fromInv.getItemDetail(k)
@@ -737,6 +781,7 @@ local function getStorage(id)
                     end
                 end
             end
+            print("REMAIN: " .. toTransfer)
             if toTransfer > 0 then
                 list = fromInv.list()
                 strList = parapi.list()
