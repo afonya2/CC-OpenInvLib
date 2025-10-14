@@ -41,7 +41,7 @@ local function matchItem(itemA, itemB)
     end
     return false
 end
-function mysplit (inputstr, sep)
+local function mysplit(inputstr, sep)
     if sep == nil then
             sep = "%s"
     end
@@ -217,6 +217,35 @@ local function scanStorage(strg)
     saveFile("openinvlib_data/item_cache.txt", itemCache)
 end
 
+local function generateTurtleInvWrap(tid)
+    local out = {}
+    out.size = function()
+        return 16
+    end
+    out.list = function()
+        local llist = {}
+        for i=1,16 do
+            llist[i] = turtle.getItemDetail(i)
+        end
+        return llist
+    end
+    out.getItemDetail = function(slot)
+        return turtle.getItemDetail(slot, true)
+    end
+    out.getItemLimit = function(slot)
+        return turtle.getItemDetail(slot, true).maxCount
+    end
+    out.pushItems = function(toName, fromSlot, limit, toSlot)
+        local wrap = wrappedStorages[toName]
+        return wrap.pullItems(tid, fromSlot, limit, toSlot)
+    end
+    out.pullItems = function(fromName, fromSlot, limit, toSlot)
+        local wrap = wrappedStorages[fromName]
+        return wrap.pushItems(tid, fromSlot, limit, toSlot)
+    end
+    return out
+end
+
 local function scanPeripherals()
     local newWrapped = {}
     local periphs = peripheral.getNames()
@@ -227,8 +256,7 @@ local function scanPeripherals()
         end
     end
     if turtleName then
-        -- TEMPORARY FIX --
-        newWrapped[turtleName] = {}
+        newWrapped[turtleName] = generateTurtleInvWrap(turtleName)
     end
     wrappedStorages = newWrapped
 end
@@ -555,11 +583,18 @@ local function getStorage(id)
             local list = parapi.list()
             local toTransfer = limit or (2^40)
             local transferred = 0
-            for k, v in pairs(list) do
-                if matchItemQuery(v, query) then
+            for k=1,parapi.getSize() do
+                local v = list[k]
+                if v == nil then
+                    toTransfer = math.max(0, toTransfer - 64)
+                    transferred = math.min(limit, transferred + 64)
+                    if toTransfer <= 0 then
+                        return transferred
+                    end
+                elseif matchItemQuery(v, query) then
                     if v.count < v.maxCount then
-                        toTransfer = toTransfer - (v.maxCount - v.count)
-                        transferred = transferred + (v.maxCount - v.count)
+                        toTransfer = math.max(0, toTransfer - (v.maxCount - v.count))
+                        transferred = math.min(limit, transferred + (v.maxCount - v.count))
                         if toTransfer <= 0 then
                             return transferred
                         end
@@ -615,6 +650,7 @@ local function getStorage(id)
                     return nil, "Not enough of item: " .. k .. " (need " .. v-ic .. " more)"
                 end
             end
+            local craftSlots = {1,2,3,5,6,7,9,10,11}
             for i = 1, 3 do
                 if pattern[i] then
                     for j = 1, 3 do
@@ -623,7 +659,10 @@ local function getStorage(id)
                             if not item then
                                 return nil, "Missing crafting ingredient: " .. pattern[i][j]
                             end
-                            print(parapi.exportItems(item, turtleName, true, count))
+                            local ok,err = parapi.exportItems(item, turtleName, true, count, craftSlots[(i-1)*3 + j])
+                            if not ok then
+                                return nil, err
+                            end
                         end
                     end
                 end
@@ -631,6 +670,10 @@ local function getStorage(id)
             local ok, err = turtle.craft()
             if not ok then
                 return nil, err
+            end
+            local ok2,err2 = parapi.importItems(outcome, turtleName, true, outcomeCount * count)
+            if not ok2 then
+                return nil, err2
             end
         end
         parapi.exportItems = function(query, toName, noCompression, limit, toSlot)
@@ -659,6 +702,53 @@ local function getStorage(id)
                     if not noCompression then
                         
                     end]]
+                end
+            end
+            return changed
+        end
+        parapi.importItems = function(query, fromName, noCompression, limit, toSlot)
+            expect("importItems", 1, query, "string")
+            expect("importItems", 2, fromName, "string")
+            expect("importItems", 3, noCompression, "boolean", "nil")
+            expect("importItems", 4, limit, "number", "nil")
+            expect("importItems", 5, toSlot, "number", "nil")
+
+            local fromInv = wrappedStorages[fromName]
+            if not fromInv then
+                return nil, "Peripheral is not available"
+            end
+            local canImport = parapi.canImport(query, limit)
+            local list = fromInv.list()
+            local strList = parapi.list()
+            local toTransfer = math.min(canImport, limit or (2^40))
+            local changed = 0
+            for k,_ in pairs(list) do
+                local realV = fromInv.getItemDetail(k)
+                if matchItemQuery(realV, query) then
+                    for kk, vv in pairs(strList) do
+                        if matchItem(realV, vv) and (vv.count < vv.maxCount) then
+                            local change, err = parapi._internal.pullItems(fromName, k, toTransfer, toSlot or kk)
+                            if change == nil then
+                                return nil, err
+                            end
+                            toTransfer = toTransfer - change
+                            changed = changed + change
+                        end
+                    end
+                end
+            end
+            if toTransfer > 0 then
+                list = fromInv.list()
+                strList = parapi.list()
+                for k, v in pairs(list) do
+                    if matchItemQuery(v, query) then
+                        local change, err = parapi._internal.pullItems(fromName, k, toTransfer, toSlot)
+                        if change == nil then
+                            return nil, err
+                        end
+                        toTransfer = toTransfer - change
+                        changed = changed + change
+                    end
                 end
             end
             return changed
