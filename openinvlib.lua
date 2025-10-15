@@ -692,7 +692,7 @@ local function getStorage(id)
             if not ok then
                 return nil, err
             end
-            print("OC: " .. outcomeCount * count)
+            scanStorage(turtleName)
             local ok2,err2 = parapi.importItems(outcome, turtleName, true, outcomeCount * count)
             if not ok2 then
                 return nil, err2
@@ -740,6 +740,7 @@ local function getStorage(id)
                                         return nil, err2
                                     end
                                     toTransfer = toTransfer - c
+                                    changed = changed + c
                                 end
                             end
                         end
@@ -760,13 +761,10 @@ local function getStorage(id)
                 return nil, "Peripheral is not available"
             end
             local canImport = parapi.canImport(query, limit)
-            local list = fromInv.list()
             local strList = parapi.list()
             local toTransfer = math.min(canImport, limit or (2^40))
-            print("TRANSFER: " .. toTransfer)
-            -- TOFIX: OC: 9; TRANSFER: 9; REMAIN: 8
             local changed = 0
-            for k,_ in pairs(list) do
+            for k,v in pairs(itemCache[fromName].items) do
                 local realV = fromInv.getItemDetail(k)
                 if matchItemQuery(realV, query) then
                     for kk, vv in pairs(strList) do
@@ -781,11 +779,9 @@ local function getStorage(id)
                     end
                 end
             end
-            print("REMAIN: " .. toTransfer)
             if toTransfer > 0 then
-                list = fromInv.list()
                 strList = parapi.list()
-                for k, v in pairs(list) do
+                for k, v in pairs(itemCache[fromName].items) do
                     if matchItemQuery(v, query) then
                         local change, err = parapi._internal.pullItems(fromName, k, toTransfer, toSlot)
                         if change == nil then
