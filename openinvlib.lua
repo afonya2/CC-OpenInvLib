@@ -795,7 +795,56 @@ local function getStorage(id)
             end
             return changed
         end
-        
+        parapi.defragment = function()
+            local list = parapi.list()
+            local itemsMoved = 0
+            local slotsFreed = 0
+            for k, v in pairs(list) do
+                if (v ~= nil) and (v.count > 0) then
+                    if v.count < v.maxCount then
+                        for kk = k + 1, parapi.getSize() do
+                            local vv = list[kk]
+                            if vv and matchItem(v, vv) and (v.count < v.maxCount) then
+                                local oldVV = copy(vv)
+                                local toMove = math.min(vv.count, v.maxCount - v.count)
+                                local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(k)
+                                if not chest then
+                                    break
+                                end
+                                local ok = parapi._internal.pushItems(chest, kk, toMove, k)
+                                if ok then
+                                    itemsMoved = itemsMoved + ok
+                                    if oldVV.count <= ok then
+                                        slotsFreed = slotsFreed + 1
+                                    end
+                                    if v.count >= v.maxCount then
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            list = parapi.list()
+            for i=1, parapi.getSize() do
+                local v = list[i]
+                if v == nil then
+                    for j = parapi.getSize(), 1, -1 do
+                        local vv = list[j]
+                        if vv ~= nil then
+                            local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(i)
+                            if not chest then
+                                break
+                            end
+                            local ok = parapi._internal.pushItems(chest, j, vv.count, i)
+                            break
+                        end
+                    end
+                end
+            end
+            return itemsMoved, slotsFreed
+        end
         parapi.autoCompress = function()
             if not storage[id].partitions[partId].isCompressed then
                 return nil, "This partition does not support compression"
@@ -804,6 +853,7 @@ local function getStorage(id)
             local baseCount = 0
             local compCount = 0
             local freedSlots = 0
+            -- Remake it to go thru compressionInfo instead to be able to skip the defragment
             for k, v in pairs(list) do
                 local itemQuery = getItemQuery(v)
                 for kk, vv in pairs(compressionInfo) do
