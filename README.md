@@ -13,9 +13,6 @@ run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/mai
 - storage: Multiple inventories joined together
 - partition: A section of a storage, is capable of storing items
 
-## Examples
-Check out the official examples in the `examples` directory.
-
 ## Documentation
 > [!WARNING]  
 > At a time, only 1 instance should run to prevent any cache issues. Because of this OIL can be accessed from the global enviroment instead of importing it.
