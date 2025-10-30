@@ -182,6 +182,7 @@ end
 
 local wrappedStorages = {}
 
+--- Scans the storages and updates the item cache
 local function scanStorages()
     for n, inv in pairs(wrappedStorages) do
         local size = inv.size()
@@ -207,6 +208,8 @@ local function scanStorages()
     end
     saveFile("openinvlib_data/item_cache.txt", itemCache)
 end
+---Scans a specific storage and updates the item cache
+---@param strg string
 local function scanStorage(strg)
     expect("scanStorage", 1, strg, "string")
 
@@ -264,6 +267,7 @@ local function generateTurtleInvWrap(tid)
     return out
 end
 
+---Scans the connected peripherals for inventories
 local function scanPeripherals()
     local newWrapped = {}
     local periphs = peripheral.getNames()
@@ -294,6 +298,11 @@ for k, v in pairs(wrappedStorages) do
     end
 end
 
+---Creates a new storage
+---@param name string
+---@param strgs table
+---@return number|nil
+---@return string|nil
 local function createStorage(name, strgs)
     expect("createStorage", 1, name, "string")
     expect("createStorage", 2, strgs, "table")
@@ -320,6 +329,10 @@ local function createStorage(name, strgs)
     return #storage
 end
 
+---Returns a storage object
+---@param id number
+---@return table|nil
+---@return string|nil
 local function getStorage(id)
     expect("getStorage", 1, id, "number")
 
@@ -331,17 +344,27 @@ local function getStorage(id)
     end
 
     local strapi = {}
+    ---Returns the name of the storage
+    ---@return string
     strapi.getName = function()
         return storage[id].name
     end
+    ---Sets the name of the storage
+    ---@param newName string
     strapi.setName = function(newName)
         expect("setName", 1, newName, "string")
         storage[id].name = newName
         saveFile("openinvlib_data/storage.txt", storage)
     end
+    ---Returns the storages of the storage
+    ---@return table
     strapi.getStorages = function()
         return copy(storage[id].storages, true)
     end
+    ---Adds an inventory to the storage
+    ---@param strg string
+    ---@return boolean|nil
+    ---@return string|nil
     strapi.addStorage = function(strg)
         expect("addStorage", 1, strg, "string")
         for _, s in ipairs(storage) do
@@ -354,7 +377,12 @@ local function getStorage(id)
         end
         table.insert(storage[id].storages, strg)
         saveFile("openinvlib_data/storage.txt", storage)
+        return true
     end
+    ---Removes a storage from the storage
+    ---@param strg string
+    ---@return boolean|nil
+    ---@return string|nil
     strapi.removeStorage = function(strg)
         expect("removeStorage", 1, strg, "string")
         local found, idx = includes(storage[id].storages, strg)
@@ -363,7 +391,10 @@ local function getStorage(id)
         end
         table.remove(storage[id].storages, idx)
         saveFile("openinvlib_data/storage.txt", storage)
+        return true
     end
+    ---Returns the total size of the storage
+    ---@return number
     strapi.getSize = function()
         local size = 0
         for _, s in ipairs(storage[id].storages) do
@@ -371,6 +402,8 @@ local function getStorage(id)
         end
         return size
     end
+    ---Returns the partitions of the storage
+    ---@return table
     strapi.getPartitions = function()
         local out = {}
         local size = strapi.getSize()
@@ -412,6 +445,13 @@ local function getStorage(id)
         end
         return out
     end
+    ---Creates a partition
+    ---@param name string
+    ---@param startPos number
+    ---@param endPos number
+    ---@param isCompressed boolean|nil
+    ---@return number|nil
+    ---@return string|nil
     strapi.createPartition = function(name, startPos, endPos, isCompressed)
         expect("createPartition", 1, name, "string")
         expect("createPartition", 2, startPos, "number")
@@ -439,6 +479,10 @@ local function getStorage(id)
         saveFile("openinvlib_data/storage.txt", storage)
         return #storage[id].partitions
     end
+    ---Returns a partition object
+    ---@param partId number
+    ---@return table|nil
+    ---@return string|nil
     strapi.getPartition = function(partId)
         expect("getPartition", 1, partId, "number")
 
@@ -446,20 +490,33 @@ local function getStorage(id)
             return nil, "Partition not found"
         end
         local parapi = {}
+        ---Returns the name of the partition
+        ---@return string
         parapi.getName = function()
             return storage[id].partitions[partId].name
         end
+        ---Sets the name of the partition
+        ---@param newName string
+        ---@return boolean
         parapi.setName = function(newName)
             expect("setName", 1, newName, "string")
             storage[id].partitions[partId].name = newName
             saveFile("openinvlib_data/storage.txt", storage)
+            return true
         end
+        ---Returns the size of the partition
+        ---@return number
         parapi.getSize = function()
             return storage[id].partitions[partId].endPos - storage[id].partitions[partId].startPos + 1
         end
+        ---Returns if the partition is compressed
+        ---@return boolean
         parapi.isCompressed = function()
             return storage[id].partitions[partId].isCompressed
         end
+        ---Sets if the partition is compressed
+        ---@param compressed boolean
+        ---@return boolean
         parapi.setCompressed = function(compressed)
             expect("setCompressed", 1, compressed, "boolean")
 
@@ -470,6 +527,10 @@ local function getStorage(id)
             saveFile("openinvlib_data/storage.txt", storage)
             return true
         end
+        ---Moves the partition to a new start position
+        ---@param newStart number
+        ---@return boolean|nil
+        ---@return string|nil
         parapi.move = function(newStart)
             expect("move", 1, newStart, "number")
 
@@ -506,6 +567,11 @@ local function getStorage(id)
             saveFile("openinvlib_data/storage.txt", storage)
             return true
         end
+        ---Resizes the partition
+        ---@param newSize number
+        ---@param force boolean|nil
+        ---@return boolean|nil
+        ---@return string|nil
         parapi.resize = function(newSize, force)
             expect("resize", 1, newSize, "number")
             expect("resize", 2, force, "boolean", "nil")
@@ -537,9 +603,14 @@ local function getStorage(id)
             saveFile("openinvlib_data/storage.txt", storage)
             return true
         end
+        ---Returns the start and end positions of the partition
+        ---@return number
+        ---@return number
         parapi.getPositions = function()
             return storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos
         end
+        ---Lists all items in the partition
+        ---@return table
         parapi.list = function()
             local base = strapi._internal.list()
             local out = {}
@@ -548,6 +619,9 @@ local function getStorage(id)
             end
             return out
         end
+        ---Lists all unique items in the partition
+        ---@param noUncompressed boolean|nil
+        ---@return table
         parapi.listItems = function(noUncompressed)
             expect("listItems", 1, noUncompressed, "boolean", "nil")
 
@@ -590,6 +664,10 @@ local function getStorage(id)
             end
             return out
         end
+        ---Gets information about items matching the query
+        ---@param query string
+        ---@param noUncompressed boolean|nil
+        ---@return table
         parapi.getItemInfo = function(query, noUncompressed)
             expect("getItemInfo", 1, query, "string")
 
@@ -602,6 +680,10 @@ local function getStorage(id)
             end
             return out
         end
+        ---Gets the total count of items matching the query
+        ---@param query string
+        ---@param noUncompressed boolean|nil
+        ---@return number
         parapi.getItemCount = function(query, noUncompressed)
             expect("getItemCount", 1, query, "string")
 
@@ -614,6 +696,8 @@ local function getStorage(id)
             end
             return count
         end
+        ---Gets usage information about the partition
+        ---@return table
         parapi.getUsage = function()
             local out = {
                 usedSlots = 0,
@@ -631,6 +715,10 @@ local function getStorage(id)
             end
             return out
         end
+        ---Checks how many items matching the query can be imported
+        ---@param query string
+        ---@param limit number|nil
+        ---@return number
         parapi.canImport = function(query, limit)
             expect("canImport", 1, query, "string")
             expect("canImport", 2, limit, "number", "nil")
@@ -658,6 +746,14 @@ local function getStorage(id)
             end
             return transferred
         end
+        ---Crafts items using a crafty turtle
+        ---@param key table
+        ---@param pattern table
+        ---@param outcome string
+        ---@param outcomeCount number
+        ---@param count number|nil
+        ---@return boolean|nil
+        ---@return string|nil
         parapi.craft = function(key, pattern, outcome, outcomeCount, count)
             if (not turtle) or (not turtle.craft) then
                 return nil, "Crafting is only supported on crafty turtles"
@@ -736,6 +832,14 @@ local function getStorage(id)
             end
             return true
         end
+        ---Exports items matching the query to another inventory
+        ---@param query string
+        ---@param toName string
+        ---@param limit number|nil
+        ---@param noCompression boolean|nil
+        ---@param toSlot number|nil
+        ---@return number|nil
+        ---@return string|nil
         parapi.exportItems = function(query, toName, limit, noCompression, toSlot)
             expect("exportItems", 1, query, "string")
             expect("exportItems", 2, toName, "string")
@@ -790,6 +894,14 @@ local function getStorage(id)
             end
             return changed
         end
+        ---Imports items matching the query from another inventory
+        ---@param query string
+        ---@param fromName string
+        ---@param limit number|nil
+        ---@param noCompression boolean|nil
+        ---@param toSlot number|nil
+        ---@return number|nil
+        ---@return string|nil
         parapi.importItems = function(query, fromName, limit, noCompression, toSlot)
             expect("importItems", 1, query, "string")
             expect("importItems", 2, fromName, "string")
@@ -846,6 +958,14 @@ local function getStorage(id)
             end
             return changed
         end
+        ---Moves items matching the query to another partition
+        ---@param query string
+        ---@param toStorage number
+        ---@param toPartition number
+        ---@param limit number|nil
+        ---@param noCompression boolean|nil
+        ---@return number|nil
+        ---@return string|nil
         parapi.moveItems = function(query, toStorage, toPartition, limit, noCompression)
             expect("moveItems", 1, query, "string")
             expect("moveItems", 2, toStorage, "number")
@@ -932,6 +1052,9 @@ local function getStorage(id)
             end
             return changed
         end
+        ---Defragments the partition
+        ---@return number
+        ---@return number
         parapi.defragment = function()
             local list = parapi.list()
             local itemsMoved = 0
@@ -982,9 +1105,13 @@ local function getStorage(id)
             end
             return itemsMoved, slotsFreed
         end
+        ---Automatically compresses items in the partition
+        ---@return number|nil
+        ---@return number|nil
+        ---@return string|nil
         parapi.autoCompress = function()
             if not storage[id].partitions[partId].isCompressed then
-                return nil, "This partition does not support compression"
+                return nil, nil, "This partition does not support compression"
             end
             local baseCount = 0
             local compCount = 0
