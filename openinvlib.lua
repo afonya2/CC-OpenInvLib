@@ -307,6 +307,9 @@ local function createStorage(name, strgs)
     expect("createStorage", 1, name, "string")
     expect("createStorage", 2, strgs, "table")
 
+    if #strgs < 1 then
+        return nil, "No storages specified"
+    end
     for _, s in ipairs(storage) do
         for _, ss in ipairs(strgs) do
             if includes(s.storages, ss) then
@@ -331,8 +334,6 @@ end
 
 ---Returns a storage object
 ---@param id number
----@return table|nil
----@return string|nil
 local function getStorage(id)
     expect("getStorage", 1, id, "number")
 
@@ -402,7 +403,7 @@ local function getStorage(id)
         end
         return size
     end
-    ---Returns the partitions of the storage
+    ---Returns the partition table of the storage
     ---@return table
     strapi.getPartitions = function()
         local out = {}
@@ -417,14 +418,17 @@ local function getStorage(id)
                         table.insert(out, {
                             name = "Unallocated",
                             startPos = freeS,
-                            endPos = i - 1
+                            endPos = i - 1,
+                            isCompressed = false,
+                            isUnallocated = true
                         })
                         freeS = 0
                     end
                     table.insert(out, {
                         name = p.name,
                         startPos = p.startPos,
-                        endPos = p.endPos
+                        endPos = p.endPos,
+                        isCompressed = p.isCompressed
                     })
                     used = true
                     i = p.endPos
@@ -481,8 +485,6 @@ local function getStorage(id)
     end
     ---Returns a partition object
     ---@param partId number
-    ---@return table|nil
-    ---@return string|nil
     strapi.getPartition = function(partId)
         expect("getPartition", 1, partId, "number")
 
@@ -1213,6 +1215,7 @@ local function getStorage(id)
             end
             return baseToTransfer - toTransfer
         end
+        ---Deletes the partition
         parapi.delete = function()
             table.remove(storage[id].partitions, partId)
             saveFile("openinvlib_data/storage.txt", storage)
@@ -1381,6 +1384,7 @@ local function getStorage(id)
         saveFile("openinvlib_data/item_cache.txt", itemCache)
         return baseToTransfer - toTransfer
     end
+    ---Deletes the storage
     strapi.delete = function()
         table.remove(storage, id)
         saveFile("openinvlib_data/storage.txt", storage)
