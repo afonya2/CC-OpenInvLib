@@ -460,6 +460,16 @@ local function getStorage(id)
         parapi.isCompressed = function()
             return storage[id].partitions[partId].isCompressed
         end
+        parapi.setCompressed = function(compressed)
+            expect("setCompressed", 1, compressed, "boolean")
+
+            if (not storage[id].partitions[partId].isCompressed) and compressed then
+                parapi.autoCompress()
+            end
+            storage[id].partitions[partId].isCompressed = compressed
+            saveFile("openinvlib_data/storage.txt", storage)
+            return true
+        end
         parapi.move = function(newStart)
             expect("move", 1, newStart, "number")
 
@@ -479,12 +489,27 @@ local function getStorage(id)
             if newEnd > maxSize then
                 return nil, "End position exceeds storage size (" .. maxSize .. ")"
             end
+            local offset = newStart - storage[id].partitions[partId].startPos
+            if offset > 0 then
+                for i=storage[id].partitions[partId].endPos, storage[id].partitions[partId].startPos, -1 do
+                    local chest, realToSlot = strapi._internal.getRealSlot(i + offset)
+                    strapi._internal.pushItems(chest, i, 64, realToSlot)
+                end
+            else
+                for i=storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos do
+                    local chest, realToSlot = strapi._internal.getRealSlot(i + offset)
+                    strapi._internal.pushItems(chest, i, 64, realToSlot)
+                end
+            end
             storage[id].partitions[partId].startPos = newStart
             storage[id].partitions[partId].endPos = newEnd
             saveFile("openinvlib_data/storage.txt", storage)
+            return true
         end
-        parapi.resize = function(newSize)
+        parapi.resize = function(newSize, force)
             expect("resize", 1, newSize, "number")
+            expect("resize", 2, force, "boolean", "nil")
+
             if newSize < 1 then
                 return nil, "Invalid size"
             end
@@ -500,8 +525,17 @@ local function getStorage(id)
             if newEnd > maxSize then
                 return nil, "End position exceeds storage size (" .. maxSize .. ")"
             end
+            if not force then
+                local list = strapi._internal.list()
+                for i=storage[id].partitions[partId].endPos, newEnd+1, -1 do
+                    if list[i] ~= nil then
+                        return nil, "Cannot safely resize partition, items would be lost"
+                    end
+                end
+            end
             storage[id].partitions[partId].endPos = newEnd
             saveFile("openinvlib_data/storage.txt", storage)
+            return true
         end
         parapi.getPositions = function()
             return storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos
