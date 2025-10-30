@@ -621,7 +621,7 @@ local function getStorage(id)
             end
             return transferred
         end
-        parapi.craft = function(key, pattern, outcome, outcomeCount, count, noCompression)
+        parapi.craft = function(key, pattern, outcome, outcomeCount, count)
             if (not turtle) or (not turtle.craft) then
                 return nil, "Crafting is only supported on crafty turtles"
             end
@@ -638,7 +638,6 @@ local function getStorage(id)
             expect("craft", 3, outcome, "string")
             expect("craft", 4, outcomeCount, "number")
             expect("craft", 5, count, "number", "nil")
-            expect("craft", 6, noCompression, "boolean", "nil")
 
             if (type(count) == "number") and (count == 0) then
                 return true
@@ -681,7 +680,7 @@ local function getStorage(id)
                             if not item then
                                 return nil, "Missing crafting ingredient: " .. pattern[i][j]
                             end
-                            local ok,err = parapi.exportItems(item, turtleName, noCompression, count, craftSlots[(i-1)*3 + j])
+                            local ok,err = parapi.exportItems(item, turtleName, true, count, craftSlots[(i-1)*3 + j])
                             if not ok then
                                 return nil, err
                             end
@@ -694,7 +693,7 @@ local function getStorage(id)
                 return nil, err
             end
             scanStorage(turtleName)
-            local ok2,err2 = parapi.importItems(outcome, turtleName, noCompression, outcomeCount * count)
+            local ok2,err2 = parapi.importItems(outcome, turtleName, true, outcomeCount * count)
             if not ok2 then
                 return nil, err2
             end
@@ -849,31 +848,20 @@ local function getStorage(id)
             if not storage[id].partitions[partId].isCompressed then
                 return nil, "This partition does not support compression"
             end
-            local list = parapi.list()
             local baseCount = 0
             local compCount = 0
-            local freedSlots = 0
-            -- Remake it to go thru compressionInfo instead to be able to skip the defragment
-            for k, v in pairs(list) do
-                local itemQuery = getItemQuery(v)
-                for kk, vv in pairs(compressionInfo) do
-                    if matchQueries(itemQuery, vv.item) then
-                        local craftable = math.floor(v.count / vv.ratio)
-                        local oldV = copy(v)
-                        if craftable > 0 then
-                            local ok = parapi.craft(vv.craft.items, vv.craft.pattern, kk, 1, craftable, true)
-                            if ok then
-                                baseCount = baseCount + (craftable * vv.ratio)
-                                compCount = compCount + craftable
-                                if craftable * vv.ratio >= oldV.count then
-                                    freedSlots = freedSlots + 1
-                                end
-                            end
-                        end
+            for k, v in pairs(compressionInfo) do
+                local ic = parapi.getItemCount(v.item, true)
+                local craftable = math.floor(ic / v.ratio)
+                if craftable > 0 then
+                    local ok = parapi.craft(v.craft.items, v.craft.pattern, k, 1, craftable, true)
+                    if ok then
+                        baseCount = baseCount + (craftable * v.ratio)
+                        compCount = compCount + craftable
                     end
                 end
             end
-            return baseCount, compCount, freedSlots
+            return baseCount, compCount
         end
         parapi._internal = {}
         parapi._internal.size = function()
