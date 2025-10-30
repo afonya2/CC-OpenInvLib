@@ -9,7 +9,9 @@ run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/mai
 
 ## Definitions
 
-
+- inventory: A peripheral that has an inventory (chest, furnace)
+- storage: Multiple inventories joined together
+- partition: A section of a storage, is capable of storing items
 
 ## Examples
 Check out the official examples in the `examples` directory.
