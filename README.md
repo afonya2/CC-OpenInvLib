@@ -11,6 +11,9 @@ run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/mai
 
 
 
+## Examples
+Check out the official examples in the `examples` directory.
+
 ## Documentation
 > [!WARNING]  
 > At a time, only 1 instance should run to prevent any cache issues. Because of this OIL can be accessed from the global enviroment instead of importing it.
@@ -215,3 +218,329 @@ Returns a partition object
 **Returns**
 
 - table: A partition object
+
+### delete
+Deletes the storage
+
+**Parameters**
+
+**Returns**
+
+## Partition object
+An object that represents a partition.
+
+### getName
+Returns the name of the partition
+
+**Parameters**
+
+**Returns**
+
+- string: The name of the partition
+
+### setName
+Sets the name of the partition
+
+**Parameters**
+
+- name: string: The new name of the partition
+
+**Returns**
+
+### getSize
+Returns the size of the partition
+
+**Parameters**
+
+**Returns**
+
+- number: The size of the partition
+
+### isCompressed
+Returns if the partition is compressed
+
+**Parameters**
+
+**Returns**
+
+- boolean: If the partition is compressed
+
+### setCompressed
+Sets if the partition is compressed
+
+**Parameters**
+
+- compressed: boolean: If the partition should be compressed or not
+
+**Returns**
+
+### move
+Moves the partition to a new start position
+> [!TIP]
+> This function ensures that items won't get out of the partition. Thus it's safe to use!
+
+**Parameters**
+
+- newStart: number: The new start position of the partition
+
+**Returns**
+
+- boolean: If the operation succeded
+
+or
+
+- nil
+- string: Explaining the error
+
+### resize
+Resizes the partition
+> [!TIP]
+> This function ensures that items won't get out of the partition unless `force` is true. Thus it's safe to use!
+
+**Parameters**
+
+- newSize: number: The new size of the partition
+- force?: boolean: If it should care about the items or not
+
+**Returns**
+
+- boolean: If the operation succeded
+
+or
+
+- nil
+- string: Explaining the error
+
+### getPositions
+Returns the start and end positions of the partition
+
+**Parameters**
+
+**Returns**
+
+- number: The start position of the partition
+- number: The end position of the partition
+
+### list
+Lists all items in the partition, slot based
+
+**Parameters**
+
+**Returns**
+
+- table: The items in the partition, with details
+
+### listItems
+Lists all unique items in the partition
+
+**Parameters**
+
+- noUncompressed?: boolean: If compression shouldn't be considered
+
+**Returns**
+
+- table: The unique items in the partition, with details
+```lua
+{
+  [ "minecraft:redstone_block?displayName=Block of Redstone" ] = {
+    itemGroups = {},
+    name = "minecraft:redstone_block",
+    tags = {
+      [ "c:redstone_blocks" ] = true,
+      [ "c:storage_blocks" ] = true,
+    },
+    rawName = "block.minecraft.redstone_block",
+    count = 1,
+    maxCount = 64,
+    displayName = "Block of Redstone",
+  },
+  [ "minecraft:redstone?displayName=Redstone Dust" ] = {
+    itemGroups = {},
+    containsCompressed = true,
+    name = "minecraft:redstone",
+    tags = {
+      [ "c:dusts" ] = true,
+      [ "c:redstone_dusts" ] = true,
+      [ "minecraft:trim_materials" ] = true,
+      [ "c:dusts/redstone" ] = true,
+    },
+    rawName = "item.minecraft.redstone",
+    count = 32,
+    maxCount = 64,
+    displayName = "Redstone Dust",
+  },
+}
+```
+
+### getItemInfo
+Gets information about items matching the query
+> [!NOTE]  
+> This function uses the `listItems` function, so the results are similar
+
+**Parameters**
+
+- query: string: The item query
+- noUncompressed?: boolean: If compression shouldn't be considered
+
+**Returns**
+
+- table: Returns the information of the item
+
+### getItemCount
+Gets the total count of items matching the query
+
+**Parameters**
+
+- query: string: The item query
+- noUncompressed?: boolean: If compression shouldn't be considered
+
+**Returns**
+
+- number: The amount of items matching the query
+
+### getUsage
+Gets usage information about the partition
+
+**Parameters**
+
+**Returns**
+
+- table: The usage information of the partition
+```lua
+{
+  totalItems = 24,
+  fullSlots = 0,
+  usedSlots = 2,
+  totalSlots = 4,
+}
+```
+
+### canImport
+Checks how many items matching the query can be imported
+
+**Parameters**
+
+- query: string: The item query
+- limit?: number: The limit or `2^40`
+
+**Returns**
+
+- number: The amount of items that can be imported
+
+### craft
+Crafts items using a crafty turtle
+
+**Parameters**
+
+- key: table: The crafting key
+```lua
+{
+    x = "minecraft:redstone?displayName=Redstone Dust"
+}
+```
+- pattern: table: The crafting pattern
+```lua
+{
+    {"x", "x", "x"},
+    {"x", "x", "x"},
+    {"x", "x", "x"}
+}
+```
+- outcome: string: The query of the outcome
+- outcomeCount: number: The amount of items that get produced
+- count?: number: The amount of items wanted or `1`
+
+**Returns**
+
+- boolean: If the operation succeded
+
+or
+
+- nil
+- string: Explaining the error
+
+### exportItems
+Exports items matching the query to another inventory
+
+**Parameters**
+
+- query: string: The item query
+- toName: string: The peripheral name of the target inventory
+- limit?: number: The amount of items to be transferred
+- noCompression?: boolean: If compression shouldn't be done
+- toSlot?: number: The target slot for the item
+
+**Returns**
+
+- number: The amount of items transferred
+
+or
+
+- nil
+- string: Explaining the error
+
+### importItems
+Imports items matching the query from another inventory
+
+**Parameters**
+
+- query: string: The item query
+- fromName: string: The peripheral name of the source inventory
+- limit?: number: The amount of items to be transferred
+- noCompression?: boolean: If compression shouldn't be done
+
+**Returns**
+
+- number: The amount of items transferred
+
+or
+
+- nil
+- string: Explaining the error
+
+### moveItems
+Moves items matching the query to another partition
+
+**Parameters**
+
+- query: string: The item query
+- toStorage: number: The ID of the target storage
+- toPartition: number: The ID of the target partition
+- limit?: number: The amount of items to be transferred
+- noCompression?: boolean: If compression shouldn't be done
+
+**Returns**
+
+- number: The amount of items transferred
+
+or
+
+- nil
+- string: Explaining the error
+
+### defragment
+Defragments the partition
+
+**Parameters**
+
+**Returns**
+
+- number: The amount of items that were moved
+- number: The amount of slots that have been freed
+
+### autoCompress
+Automatically compresses items in the partition if possible
+
+**Parameters**
+
+**Returns**
+
+- number: The amount of items that were there before
+- number: The amount of items that are there now
+
+### delete
+Deletes the partition
+
+**Parameters**
+
+**Returns**

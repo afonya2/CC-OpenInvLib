@@ -499,12 +499,10 @@ local function getStorage(id)
         end
         ---Sets the name of the partition
         ---@param newName string
-        ---@return boolean
         parapi.setName = function(newName)
             expect("setName", 1, newName, "string")
             storage[id].partitions[partId].name = newName
             saveFile("openinvlib_data/storage.txt", storage)
-            return true
         end
         ---Returns the size of the partition
         ---@return number
@@ -518,7 +516,6 @@ local function getStorage(id)
         end
         ---Sets if the partition is compressed
         ---@param compressed boolean
-        ---@return boolean
         parapi.setCompressed = function(compressed)
             expect("setCompressed", 1, compressed, "boolean")
 
@@ -527,7 +524,6 @@ local function getStorage(id)
             end
             storage[id].partitions[partId].isCompressed = compressed
             saveFile("openinvlib_data/storage.txt", storage)
-            return true
         end
         ---Moves the partition to a new start position
         ---@param newStart number
@@ -611,7 +607,7 @@ local function getStorage(id)
         parapi.getPositions = function()
             return storage[id].partitions[partId].startPos, storage[id].partitions[partId].endPos
         end
-        ---Lists all items in the partition
+        ---Lists all items in the partition, slot based
         ---@return table
         parapi.list = function()
             local base = strapi._internal.list()
@@ -901,15 +897,13 @@ local function getStorage(id)
         ---@param fromName string
         ---@param limit number|nil
         ---@param noCompression boolean|nil
-        ---@param toSlot number|nil
         ---@return number|nil
         ---@return string|nil
-        parapi.importItems = function(query, fromName, limit, noCompression, toSlot)
+        parapi.importItems = function(query, fromName, limit, noCompression)
             expect("importItems", 1, query, "string")
             expect("importItems", 2, fromName, "string")
             expect("importItems", 3, limit, "number", "nil")
             expect("importItems", 4, noCompression, "boolean", "nil")
-            expect("importItems", 5, toSlot, "number", "nil")
 
             local fromInv = wrappedStorages[fromName]
             if not fromInv then
@@ -923,7 +917,7 @@ local function getStorage(id)
                 if matchItemQuery(v, query) then
                     for kk, vv in pairs(strList) do
                         if matchItem(v, vv) and (vv.count < vv.maxCount) then
-                            local change, err = parapi._internal.pullItems(fromName, k, toTransfer, toSlot or kk)
+                            local change, err = parapi._internal.pullItems(fromName, k, toTransfer, kk)
                             if change == nil then
                                 return nil, err
                             end
@@ -943,7 +937,7 @@ local function getStorage(id)
                 strList = parapi.list()
                 for k, v in pairs(itemCache[fromName].items) do
                     if matchItemQuery(v, query) then
-                        local change, err = parapi._internal.pullItems(fromName, k, toTransfer, toSlot)
+                        local change, err = parapi._internal.pullItems(fromName, k, toTransfer)
                         if change == nil then
                             return nil, err
                         end
@@ -1092,7 +1086,7 @@ local function getStorage(id)
             for i=1, parapi.getSize() do
                 local v = list[i]
                 if v == nil then
-                    for j = parapi.getSize(), 1, -1 do
+                    for j = parapi.getSize(), i, -1 do
                         local vv = list[j]
                         if vv ~= nil then
                             local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(i)
@@ -1100,6 +1094,12 @@ local function getStorage(id)
                                 break
                             end
                             local ok = parapi._internal.pushItems(chest, j, vv.count, i)
+                            if ok ~= nil then
+                                if ok >= vv.count then
+                                    slotsFreed = slotsFreed + 1
+                                end
+                                itemsMoved = itemsMoved + ok
+                            end
                             break
                         end
                     end
@@ -1107,7 +1107,7 @@ local function getStorage(id)
             end
             return itemsMoved, slotsFreed
         end
-        ---Automatically compresses items in the partition
+        ---Automatically compresses items in the partition if possible
         ---@return number|nil
         ---@return number|nil
         ---@return string|nil
