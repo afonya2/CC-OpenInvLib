@@ -457,6 +457,9 @@ local function getStorage(id)
         parapi.getSize = function()
             return storage[id].partitions[partId].endPos - storage[id].partitions[partId].startPos + 1
         end
+        parapi.isCompressed = function()
+            return storage[id].partitions[partId].isCompressed
+        end
         parapi.move = function(newStart)
             expect("move", 1, newStart, "number")
 
@@ -680,7 +683,7 @@ local function getStorage(id)
                             if not item then
                                 return nil, "Missing crafting ingredient: " .. pattern[i][j]
                             end
-                            local ok,err = parapi.exportItems(item, turtleName, true, count, craftSlots[(i-1)*3 + j])
+                            local ok,err = parapi.exportItems(item, turtleName, count, true, craftSlots[(i-1)*3 + j])
                             if not ok then
                                 return nil, err
                             end
@@ -693,17 +696,17 @@ local function getStorage(id)
                 return nil, err
             end
             scanStorage(turtleName)
-            local ok2,err2 = parapi.importItems(outcome, turtleName, true, outcomeCount * count)
+            local ok2,err2 = parapi.importItems(outcome, turtleName, outcomeCount * count, true)
             if not ok2 then
                 return nil, err2
             end
             return true
         end
-        parapi.exportItems = function(query, toName, noCompression, limit, toSlot)
+        parapi.exportItems = function(query, toName, limit, noCompression, toSlot)
             expect("exportItems", 1, query, "string")
             expect("exportItems", 2, toName, "string")
-            expect("exportItems", 3, noCompression, "boolean", "nil")
-            expect("exportItems", 4, limit, "number", "nil")
+            expect("exportItems", 3, limit, "number", "nil")
+            expect("exportItems", 4, noCompression, "boolean", "nil")
             expect("exportItems", 5, toSlot, "number", "nil")
 
             local toInv = wrappedStorages[toName]
@@ -721,6 +724,9 @@ local function getStorage(id)
                     end
                     toTransfer = toTransfer - change
                     changed = changed + change
+                    if toTransfer < 1 then
+                        break
+                    end
                 end
             end
             if (toTransfer > 0) and (not noCompression) and storage[id].partitions[partId].isCompressed then
@@ -731,14 +737,17 @@ local function getStorage(id)
                         if cInfo then
                             if matchQueries(cInfo.item, query) then
                                 local crafty = math.min(parapi.getItemCount(getItemQuery(v), true), math.ceil(toTransfer / cInfo.ratio))
-                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty, true)
+                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty)
                                 if ok then
-                                    local c, err2 = parapi.exportItems(query, toName, true, crafty * cInfo.ratio, toSlot)
+                                    local c, err2 = parapi.exportItems(query, toName, toTransfer, true, toSlot)
                                     if not c then
                                         return nil, err2
                                     end
                                     toTransfer = toTransfer - c
                                     changed = changed + c
+                                end
+                                if toTransfer < 1 then
+                                    break
                                 end
                             end
                         end
@@ -747,11 +756,11 @@ local function getStorage(id)
             end
             return changed
         end
-        parapi.importItems = function(query, fromName, noCompression, limit, toSlot)
+        parapi.importItems = function(query, fromName, limit, noCompression, toSlot)
             expect("importItems", 1, query, "string")
             expect("importItems", 2, fromName, "string")
-            expect("importItems", 3, noCompression, "boolean", "nil")
-            expect("importItems", 4, limit, "number", "nil")
+            expect("importItems", 3, limit, "number", "nil")
+            expect("importItems", 4, noCompression, "boolean", "nil")
             expect("importItems", 5, toSlot, "number", "nil")
 
             local fromInv = wrappedStorages[fromName]
@@ -772,7 +781,13 @@ local function getStorage(id)
                             end
                             toTransfer = toTransfer - change
                             changed = changed + change
+                            if toTransfer < 1 then
+                                break
+                            end
                         end
+                    end
+                    if toTransfer < 1 then
+                        break
                     end
                 end
             end
@@ -786,11 +801,100 @@ local function getStorage(id)
                         end
                         toTransfer = toTransfer - change
                         changed = changed + change
+                        if toTransfer < 1 then
+                            break
+                        end
                     end
                 end
             end
             if (not noCompression) and storage[id].partitions[partId].isCompressed then
                 parapi.autoCompress()
+            end
+            return changed
+        end
+        parapi.moveItems = function(query, toStorage, toPartition, limit, noCompression)
+            expect("moveItems", 1, query, "string")
+            expect("moveItems", 2, toStorage, "number")
+            expect("moveItems", 3, toPartition, "number")
+            expect("moveItems", 4, limit, "number", "nil")
+            expect("moveItems", 5, noCompression, "boolean", "nil")
+
+            local toStrg, err1 = getStorage(toStorage)
+            if not toStrg then
+                return nil, err1
+            end
+            local toPart, err2 = toStrg.getPartition(toPartition)
+            if not toPart then
+                return nil, err2
+            end
+            local toSize = toPart.getSize()
+            local canImport = toPart.canImport(query, limit)
+            local toTransfer = math.min(canImport, limit or (2^40))
+            local changed = 0
+            local list = parapi.list()
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(k)
+                    local ls = toPart.list()
+                    for kk, vv in pairs(ls) do
+                        if matchItem(v, vv) and (vv.count < vv.maxCount) then
+                            local change, err = toPart._internal.pullItems(chest, realFromSlot, toTransfer, kk)
+                            if change == nil then
+                                return nil, err
+                            end
+                            toTransfer = toTransfer - change
+                            changed = changed + change
+                            if toTransfer <= 0 then
+                                break
+                            end
+                        end
+                    end
+                    if toTransfer <= 0 then
+                        break
+                    end
+                end
+            end
+            if toTransfer > 0 then
+                list = parapi.list()
+                for k, v in pairs(list) do
+                    if matchItemQuery(v, query) then
+                        local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(k)
+                        local change, err = toPart._internal.pullItems(chest, realFromSlot, toTransfer)
+                        if change == nil then
+                            return nil, err
+                        end
+                        toTransfer = toTransfer - change
+                        changed = changed + change
+                        if toTransfer <= 0 then
+                            break
+                        end
+                    end
+                end
+            end
+            if (toTransfer > 0) and (not noCompression) and (storage[id].partitions[partId].isCompressed) then
+                list = parapi.list()
+                for k, v in pairs(list) do
+                    if compressionInfo[getItemQuery(v)] then
+                        local cInfo = compressionInfo[getItemQuery(v)]
+                        if cInfo then
+                            if matchQueries(cInfo.item, query) then
+                                local crafty = math.min(parapi.getItemCount(getItemQuery(v), true), math.ceil(toTransfer / cInfo.ratio))
+                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty)
+                                if ok then
+                                    local c, err2 = parapi.moveItems(query, toStorage, toPartition, toTransfer, true)
+                                    if not c then
+                                        return nil, err2
+                                    end
+                                    toTransfer = toTransfer - c
+                                    changed = changed + c
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            if toPart.isCompressed() and (not noCompression) then
+                toPart.autoCompress()
             end
             return changed
         end
@@ -854,7 +958,7 @@ local function getStorage(id)
                 local ic = parapi.getItemCount(v.item, true)
                 local craftable = math.floor(ic / v.ratio)
                 if craftable > 0 then
-                    local ok = parapi.craft(v.craft.items, v.craft.pattern, k, 1, craftable, true)
+                    local ok = parapi.craft(v.craft.items, v.craft.pattern, k, 1, craftable)
                     if ok then
                         baseCount = baseCount + (craftable * v.ratio)
                         compCount = compCount + craftable
