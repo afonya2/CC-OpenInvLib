@@ -143,8 +143,12 @@ local commands = {
                     {"###", "Name", "Start", "End", "Size", "Compressed"}
                 }
                 local partitions = ok.getPartitions()
-                for id, part in pairs(partitions) do
-                    table.insert(rows, { "Part "..id, part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos + 1).." slots", part.isCompressed and "*" or "" })
+                local id = 1
+                for _, part in pairs(partitions) do
+                    table.insert(rows, { (not part.isUnallocated and "Part "..id or "Unl"), part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos + 1).." slots", part.isCompressed and "*" or "" })
+                    if not part.isUnallocated then
+                        id = id + 1
+                    end
                 end
                 makeTable(rows)
             else

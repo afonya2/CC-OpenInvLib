@@ -444,7 +444,9 @@ local function getStorage(id)
             table.insert(out, {
                 name = "Unallocated",
                 startPos = freeS,
-                endPos = size
+                endPos = size,
+                isCompressed = false,
+                isUnallocated = true
             })
         end
         return out
