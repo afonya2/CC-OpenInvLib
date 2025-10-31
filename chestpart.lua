@@ -6,31 +6,34 @@ print("ChestPart (Open Inventory Library)\n\n")
 local oil = openInvLib
 local function mysplit(inputstr, sep)
     if sep == nil then
-            sep = "%s"
+        sep = "%s"
     end
-    local t={}
-    for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
-            table.insert(t, str)
+    local t = {}
+    for str in string.gmatch(inputstr, "([^" .. sep .. "]+)") do
+        table.insert(t, str)
     end
     return t
+end
+local function startsWith(str, start)
+    return str:sub(1, #start) == start
 end
 local function makeTable(rows)
     -- TODO: rework this
     local colSizes = {}
-    for i=1,#rows do
-        for j=1,#rows[i] do
+    for i = 1, #rows do
+        for j = 1, #rows[i] do
             colSizes[j] = math.max(colSizes[j] or 0, #tostring(rows[i][j]))
         end
     end
     table.insert(rows, 2, {})
-    for k,v in pairs(colSizes) do
+    for k, v in pairs(colSizes) do
         rows[2][k] = string.rep("-", v)
     end
-    for i=1,#rows do
+    for i = 1, #rows do
         local str = ""
-        for j=1,#rows[i] do
+        for j = 1, #rows[i] do
             local missing = math.max(0, colSizes[j] - #tostring(rows[i][j]))
-            str = str..tostring(rows[i][j])..string.rep(" ", missing+2)
+            str = str .. tostring(rows[i][j]) .. string.rep(" ", missing + 2)
         end
         print(str)
         if i > 3 then
@@ -40,8 +43,59 @@ local function makeTable(rows)
 end
 local selectedStorage = nil
 local selectedPartition = nil
+local commands = {
+    {
+        name = "list",
+        description = "Display a list of storages or partitions.",
+        usage = {
+            {
+                { "storage" },
+                { "partition" }
+            }
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("STORAGE - Display a list of storages.")
+                print("PARTITION - Display a list of partitions in the selected storage.")
+                return
+            end
+            local subcmd = args[1]:lower()
+            if subcmd == "storage" then
+                local rows = {
+                    {"###", "Name", "Status", "Size"}
+                }
+                for i=1,2^16 do
+                    local ok,err = oil.getStorage(i)
+                    if ok then
+                        table.insert(rows, {"Str "..i, ok.getName() or "Unknown", "Online", ok.getSize().." slots"})
+                    else
+                        if err == "Storage not found" then
+                            break
+                        else
+                            table.insert(rows, {"Str "..i, "Unknown", "Offline", "Unknown slots"})
+                        end
+                    end
+                end
+                makeTable(rows)
+            end
+        end
+    },
+    {
+        name = "select",
+        description = "Select a storage or partition by ID.",
+        usage = {
+            {
+                { "storage" },
+                { "partition" }
+            }, "<ID>"
+        },
+        onRun = function(command, args)
 
-local function onCommand(command, args)
+        end
+    },
+}
+
+--[[local function onCommand(command, args)
     if command == "list" then
         if #args < 1 then
             print("STORAGE - Display a list of storages.")
@@ -137,6 +191,75 @@ local function onCommand(command, args)
             print("PARTITION <ID> - Select a partition by ID in the selected storage.")
             return
         end
+    end
+end]]
+
+local function onCommand(command, args)
+    local foundCmd = 0
+    for k, v in pairs(commands) do
+        if startsWith(v.name:lower(), command:lower()) then
+            if foundCmd ~= 0 then
+                print("Unknown command.")
+                return
+            end
+            foundCmd = k
+        end
+    end
+    if foundCmd ~= 0 then
+        local realCommand = commands[foundCmd].name
+        local newArgs = {}
+        local stack = {
+            {
+                value = commands[foundCmd].usage,
+                check = 1
+            }
+        }
+        local k = 1
+        while k <= #args do
+            local v = args[k]
+            local compare = stack[#stack].value[stack[#stack].check]
+            if compare ~= nil then
+                stack[#stack].check = stack[#stack].check + 1
+                if type(compare) == "string" then
+                    if startsWith(compare, "<") then
+                        table.insert(newArgs, v)
+                    elseif startsWith(compare:lower(), v:lower()) then
+                        table.insert(newArgs, compare)
+                    else
+                        print("Unknown command.")
+                        return
+                    end
+                elseif type(compare) == "table" then
+                    local found = false
+                    for kk, vv in ipairs(compare) do
+                        if startsWith(vv[1]:lower(), v:lower()) then
+                            table.insert(stack, {
+                                value = vv,
+                                check = 1
+                            })
+                            if found then
+                                print("Unknown command.")
+                                return
+                            end
+                            found = true
+                        end
+                    end
+                    if not found then
+                        print("Unknown command.")
+                        return
+                    else
+                        k = k - 1
+                    end
+                end
+            else
+                table.remove(stack, #stack)
+                k = k - 1
+            end
+            k = k + 1
+        end
+        commands[foundCmd].onRun(realCommand, newArgs)
+    else
+        print("Unknown command.")
     end
 end
 
