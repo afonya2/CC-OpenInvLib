@@ -17,6 +17,9 @@ end
 local function startsWith(str, start)
     return str:sub(1, #start) == start
 end
+local function endsWith(str, ending)
+    return str:sub(-#ending) == ending
+end
 local function makeTable(rows)
     local colSizes = {}
     for i = 1, #rows do
@@ -63,7 +66,7 @@ local function makeTable(rows)
             end
         end
         print(str)
-        if i > 3 then
+        if i > 5 then
             io.read()
             local cx, cy = term.getCursorPos()
             term.setCursorPos(1, cy - 1)
@@ -79,12 +82,14 @@ local commands = {
         usage = {
             {
                 { "storage" },
+                { "inventory" },
                 { "partition" }
             }
         },
         onRun = function(command, args)
             if #args < 1 then
                 print("STORAGE - Display a list of storages.")
+                print("INVENTORY - Display the inventories of the selected storage.")
                 print("PARTITION - Display a list of partitions in the selected storage.")
                 return
             end
@@ -106,6 +111,24 @@ local commands = {
                     end
                 end
                 makeTable(rows)
+            elseif subcmd == "inventory" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error: "..err)
+                    return
+                end
+                local inventories = ok.getStorages()
+                local rows = {
+                    {"Name"}
+                }
+                for _, inv in pairs(inventories) do
+                    table.insert(rows, {inv})
+                end
+                makeTable(rows)
             elseif subcmd == "partition" then
                 if selectedStorage == nil then
                     print("No storage selected.")
@@ -121,7 +144,7 @@ local commands = {
                 }
                 local partitions = ok.getPartitions()
                 for id, part in pairs(partitions) do
-                    table.insert(rows, { "Part "..id, part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos).." slots", part.isCompressed and "*" or "" })
+                    table.insert(rows, { "Part "..id, part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos + 1).." slots", part.isCompressed and "*" or "" })
                 end
                 makeTable(rows)
             else
@@ -190,6 +213,174 @@ local commands = {
             end
         end
     },
+    {
+        name = "scan",
+        description = "Rescan the inventory, or peripherals.",
+        usage = {
+            {
+                { "inventory", "<name>" },
+                { "peripherals" },
+                { "all" }
+            }
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("INVENTORY - Rescan the inventory.")
+                print("PERIPHERALS - Rescan the peripherals.")
+                print("ALL - Rescan both the inventory and peripherals.")
+                return
+            end
+            local target = args[1]:lower()
+            if target == "inventory" then
+                if startsWith("all", args[2]) then
+                    oil.scanStorages()
+                elseif args[2] ~= nil then
+                    oil.scanStorage(args[2])
+                else
+                    print("Please specify a peripheral name or 'all'.")
+                    return
+                end
+                print("Inventory rescanned.")
+            elseif target == "peripherals" then
+                oil.scanPeripherals()
+                print("Peripherals rescanned.")
+            elseif target == "all" then
+                oil.scanPeripherals()
+                oil.scanStorages()
+                print("Inventory and peripherals rescanned.")
+            else
+                print("INVENTORY <NAME> - Rescan the inventory.")
+                print("INVENTORY ALL - Rescan all inventories.")
+                print("PERIPHERALS - Rescan the peripherals.")
+                print("ALL - Rescan both the inventory and peripherals.")
+                return
+            end
+        end
+    },
+    {
+        name = "create",
+        description = "Create a new storage or partition.",
+        usage = {
+            {
+                { "storage", "<name>", "<peripherals>" },
+                { "partition", "<name>", "<start pos>", "<end pos>", "compressed" },
+            }
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("STORAGE <NAME> <PERIPHERALS> - Create a new storage. Peripherals separated by commas.")
+                print("PARTITION <NAME> <START POS> <END POS> - Create a new partition.")
+                print("PARTITION <NAME> <START POS> <END POS> COMPRESSED - Create a new compressed partition.")
+                return
+            end
+            local mode = args[1]:lower()
+            if mode == "storage" then
+                if #args < 3 then
+                    print("STORAGE <NAME> <PERIPHERALS> - Create a new storage. Peripherals separated by commas.")
+                    return
+                end
+                local name = args[2]
+                local peripherals = mysplit(args[3], ",")
+                local ok, err = oil.createStorage(name, peripherals)
+                if not ok then
+                    print("Error creating storage: "..err)
+                    return
+                end
+                print("Storage created successfully with ID "..ok..".")
+            elseif mode == "partition" then
+                if #args < 4 then
+                    print("PARTITION <NAME> <START POS> <END POS> - Create a new partition.")
+                    print("PARTITION <NAME> <START POS> <END POS> COMPRESSED - Create a new compressed partition.")
+                    return
+                end
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                local name = args[2]
+                local startPos = tonumber(args[3])
+                local endPos = tonumber(args[4])
+                local isCompressed = false
+                if #args >= 5 and args[5]:lower() == "compressed" then
+                    isCompressed = true
+                end
+                if startPos == nil or endPos == nil then
+                    print("Invalid start or end position.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error creating partition: "..err)
+                    return
+                end
+                local ok2, err2 = ok.createPartition(name, startPos, endPos, isCompressed)
+                if not ok2 then
+                    print("Error creating partition: "..err2)
+                    return
+                end
+                print("Partition created successfully with ID "..ok2..".")
+            else
+                print("STORAGE <NAME> <PERIPHERALS> - Create a new storage. Peripherals separated by commas.")
+                print("PARTITION <NAME> <START POS> <END POS> - Create a new partition.")
+                print("PARTITION <NAME> <START POS> <END POS> COMPRESSED - Create a new compressed partition.")
+                return
+            end
+        end
+    },
+    {
+        name = "rename",
+        description = "Rename a storage or partition.",
+        usage = {
+            {
+                { "storage" },
+                { "partition" }
+            },
+            "<new name>"
+        },
+        onRun = function(command, args)
+            if #args < 2 then
+                print("RENAME STORAGE <NEW NAME> - Rename a storage.")
+                print("RENAME PARTITION <NEW NAME> - Rename a partition.")
+                return
+            end
+            local type = args[1]:lower()
+            local newName = args[2]
+            if type == "storage" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error: "..err)
+                    return
+                end
+                ok.setName(newName)
+                print("Storage renamed successfully.")
+            elseif type == "partition" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                if selectedPartition == nil then
+                    print("No partition selected.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error: "..err)
+                    return
+                end
+                local ok2, err2 = ok.getPartition(selectedPartition)
+                if not ok2 then
+                    print("Error: "..err2)
+                    return
+                end
+                ok2.setName(newName)
+                print("Partition renamed successfully.")
+            end
+        end
+    }
 }
 
 local function onCommand(command, args)
@@ -215,12 +406,33 @@ local function onCommand(command, args)
         local k = 1
         while k <= #args do
             local v = args[k]
+            if #stack == 0 then
+                print("Unknown command.")
+                return
+            end
             local compare = stack[#stack].value[stack[#stack].check]
             if compare ~= nil then
                 stack[#stack].check = stack[#stack].check + 1
                 if type(compare) == "string" then
                     if startsWith(compare, "<") then
-                        table.insert(newArgs, v)
+                        if startsWith(v, '"') then
+                            local val = v:sub(2)
+                            while (not endsWith(v, '"')) or endsWith(v, '\\"') do
+                                if endsWith(v, '\\"') then
+                                    val = val:sub(1, -3) .. '"'
+                                end
+                                k = k + 1
+                                if k > #args then
+                                    print("Unclosed quotation mark.")
+                                    return
+                                end
+                                v = args[k]
+                                val = val .. " " .. v
+                            end
+                            table.insert(newArgs, val:sub(1, -2))
+                        else
+                            table.insert(newArgs, v)
+                        end
                     elseif startsWith(compare:lower(), v:lower()) then
                         table.insert(newArgs, compare)
                     else
@@ -268,6 +480,9 @@ while true do
     if #args > 0 then
         local command = args[1]:lower()
         table.remove(args, 1)
+        if command:lower() == "exit" then
+            break
+        end
         print()
         onCommand(command, args)
         print()
