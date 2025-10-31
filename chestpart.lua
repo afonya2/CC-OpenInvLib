@@ -18,26 +18,55 @@ local function startsWith(str, start)
     return str:sub(1, #start) == start
 end
 local function makeTable(rows)
-    -- TODO: rework this
     local colSizes = {}
     for i = 1, #rows do
         for j = 1, #rows[i] do
             colSizes[j] = math.max(colSizes[j] or 0, #tostring(rows[i][j]))
         end
     end
-    table.insert(rows, 2, {})
-    for k, v in pairs(colSizes) do
-        rows[2][k] = string.rep("-", v)
+    local colPos = {}
+    local w,h = term.getSize()
+    local x = 1
+    local y = 1
+    for k, v in ipairs(colSizes) do
+        if x + v + 2 > w then
+            x = 1
+            y = y + 1
+        end
+        colPos[k] = {
+            x = x,
+            y = y
+        }
+        x = x + v + 2
     end
     for i = 1, #rows do
         local str = ""
+        local alp = 1
         for j = 1, #rows[i] do
             local missing = math.max(0, colSizes[j] - #tostring(rows[i][j]))
+            if colPos[j].y > (colPos[j-1] and colPos[j-1].y or 1) then
+                if i == 1 then
+                    str = str .. "\n"
+                    for l = 1, j-1 do
+                        str = str .. string.rep("-", colSizes[l]) .. "  "
+                    end
+                    alp = j
+                end
+                str = str .. "\n"
+            end
             str = str .. tostring(rows[i][j]) .. string.rep(" ", missing + 2)
+        end
+        if i == 1 then
+            str = str .. "\n"
+            for l = alp, #rows[i] do
+                str = str .. string.rep("-", colSizes[l]) .. "  "
+            end
         end
         print(str)
         if i > 3 then
             io.read()
+            local cx, cy = term.getCursorPos()
+            term.setCursorPos(1, cy - 1)
         end
     end
 end
@@ -77,6 +106,28 @@ local commands = {
                     end
                 end
                 makeTable(rows)
+            elseif subcmd == "partition" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error: "..err)
+                    return
+                end
+                local rows = {
+                    {"###", "Name", "Start", "End", "Size", "Compressed"}
+                }
+                local partitions = ok.getPartitions()
+                for id, part in pairs(partitions) do
+                    table.insert(rows, { "Part "..id, part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos).." slots", part.isCompressed and "*" or "" })
+                end
+                makeTable(rows)
+            else
+                print("STORAGE - Display a list of storages.")
+                print("PARTITION - Display a list of partitions in the selected storage.")
+                return
             end
         end
     },
@@ -90,109 +141,56 @@ local commands = {
             }, "<ID>"
         },
         onRun = function(command, args)
-
+            if #args < 2 then
+                print("STORAGE <ID> - Select a storage by ID.")
+                print("PARTITION <ID> - Select a partition by ID in the selected storage.")
+                return
+            end
+            local subcmd = args[1]:lower()
+            if subcmd == "storage" then
+                local id = tonumber(args[2])
+                if id == nil then
+                    print("Invalid storage ID.")
+                    return
+                end
+                local ok, err = oil.getStorage(id)
+                if not ok then
+                    print("Error selecting storage: "..err)
+                    return
+                end
+                selectedStorage = id
+                selectedPartition = nil
+                print("Storage "..id.." is now the selected storage.")
+            elseif subcmd == "partition" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                local id = tonumber(args[2])
+                if id == nil then
+                    print("Invalid partition ID.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error selecting partition: "..err)
+                    return
+                end
+                local ok2, err2 = ok.getPartition(id)
+                if not ok2 then
+                    print("Error selecting partition: "..err2)
+                    return
+                end
+                selectedPartition = id
+                print("Partition "..id.." is now the selected partition.")
+            else
+                print("STORAGE <ID> - Select a storage by ID.")
+                print("PARTITION <ID> - Select a partition by ID in the selected storage.")
+                return
+            end
         end
     },
 }
-
---[[local function onCommand(command, args)
-    if command == "list" then
-        if #args < 1 then
-            print("STORAGE - Display a list of storages.")
-            print("PARTITION - Display a list of partitions in the selected storage.")
-            return
-        end
-        local subcmd = args[1]:lower()
-        if subcmd == "storage" then
-            local rows = {
-                {"###", "Name", "Status", "Size"}
-            }
-            for i=1,2^16 do
-                local ok,err = oil.getStorage(i)
-                if ok then
-                    table.insert(rows, {"Str "..i, ok.getName() or "Unknown", "Online", ok.getSize().." slots"})
-                else
-                    if err == "Storage not found" then
-                        break
-                    else
-                        table.insert(rows, {"Str "..i, "Unknown", "Offline", "Unknown slots"})
-                    end
-                end
-            end
-            makeTable(rows)
-        elseif subcmd == "partition" then
-            if selectedStorage == nil then
-                print("No storage selected.")
-                return
-            end
-            local ok, err = oil.getStorage(selectedStorage)
-            if not ok then
-                print("Error: "..err)
-                return
-            end
-            local rows = {
-                {"###", "Name", "Start", "End", "Size", "Compressed"}
-            }
-            local partitions = ok.getPartitions()
-            for id, part in pairs(partitions) do
-                table.insert(rows, { "Part "..id, part.name or "Unknown", part.startPos, part.endPos, (part.endPos - part.startPos).." slots", part.isCompressed and "*" or "" })
-            end
-            makeTable(rows)
-        else
-            print("STORAGE - Display a list of storages.")
-            print("PARTITION - Display a list of partitions in the selected storage.")
-            return
-        end
-    elseif command == "select" then
-        if #args < 2 then
-            print("STORAGE <ID> - Select a storage by ID.")
-            print("PARTITION <ID> - Select a partition by ID in the selected storage.")
-            return
-        end
-        local subcmd = args[1]:lower()
-        if subcmd == "storage" then
-            local id = tonumber(args[2])
-            if id == nil then
-                print("Invalid storage ID.")
-                return
-            end
-            local ok, err = oil.getStorage(id)
-            if not ok then
-                print("Error selecting storage: "..err)
-                return
-            end
-            selectedStorage = id
-            selectedPartition = nil
-            print("Storage "..id.." is now the selected storage.")
-        elseif subcmd == "partition" then
-            if selectedStorage == nil then
-                print("No storage selected.")
-                return
-            end
-            local id = tonumber(args[2])
-            if id == nil then
-                print("Invalid partition ID.")
-                return
-            end
-            local ok, err = oil.getStorage(selectedStorage)
-            if not ok then
-                print("Error selecting partition: "..err)
-                return
-            end
-            local ok2, err2 = ok.getPartition(id)
-            if not ok2 then
-                print("Error selecting partition: "..err2)
-                return
-            end
-            selectedPartition = id
-            print("Partition "..id.." is now the selected partition.")
-        else
-            print("STORAGE <ID> - Select a storage by ID.")
-            print("PARTITION <ID> - Select a partition by ID in the selected storage.")
-            return
-        end
-    end
-end]]
 
 local function onCommand(command, args)
     local foundCmd = 0
