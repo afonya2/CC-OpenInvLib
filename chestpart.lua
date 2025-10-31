@@ -384,6 +384,136 @@ local commands = {
                 print("Partition renamed successfully.")
             end
         end
+    },
+    {
+        name = "inventory",
+        description = "Add or remove inventories to/from a storage.",
+        usage = {
+            {
+                { "add" },
+                { "remove" }
+            },
+            "<name>"
+        },
+        onRun = function(command, args)
+            if #args < 2 then
+                print("ADD <NAME> - Add an inventory to the selected storage.")
+                print("REMOVE <NAME> - Remove an inventory from the selected storage.")
+                return
+            end
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            local action = args[1]:lower()
+            local name = args[2]
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error: "..err)
+                return
+            end
+            if action == "add" then
+                local ok2, err2 = ok.addStorage(name)
+                if not ok2 then
+                    print("Error adding inventory: "..err2)
+                    return
+                end
+                print("Inventory added successfully.")
+            elseif action == "remove" then
+                print("Removing an inventory will result in partitions and items moving around.")
+                term.write("Continue? (y/n): ")
+                local resp = io.read()
+                if not startsWith("yes", resp:lower()) then
+                    print("Operation cancelled.")
+                    return
+                end
+                local ok2, err2 = ok.removeStorage(name)
+                if not ok2 then
+                    print("Error removing inventory: "..err2)
+                    return
+                end
+                print("Inventory removed successfully.")
+            else
+                print("ADD <NAME> - Add an inventory to the selected storage.")
+                print("REMOVE <NAME> - Remove an inventory from the selected storage.")
+                return
+            end
+        end
+    },
+    {
+        name = "delete",
+        description = "Delete a storage or partition.",
+        usage = {
+            {
+                { "storage" },
+                { "partition" }
+            },
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("STORAGE - Delete the selected storage.")
+                print("PARTITION - Delete the selected partition.")
+                return
+            end
+            local type = args[1]:lower()
+            if type == "storage" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                print("Deleting a storage will delete all partitions and make items within it unaccessible.")
+                print("Furthermore, it will cause ID changes for other storages.")
+                term.write("Continue? (y/n): ")
+                local resp = io.read()
+                if not startsWith("yes", resp:lower()) then
+                    print("Operation cancelled.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error deleting storage: "..err)
+                    return
+                end
+                ok.delete()
+                selectedStorage = nil
+                selectedPartition = nil
+                print("Storage deleted successfully.")
+            elseif type == "partition" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                if selectedPartition == nil then
+                    print("No partition selected.")
+                    return
+                end
+                print("Deleting a partition will make items unaccessible.")
+                print("Furthermore, it will cause ID changes for other partitions.")
+                term.write("Continue? (y/n): ")
+                local resp = io.read()
+                if not startsWith("yes", resp:lower()) then
+                    print("Operation cancelled.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error deleting partition: "..err)
+                    return
+                end
+                local ok2, err2 = ok.getPartition(selectedPartition)
+                if not ok2 then
+                    print("Error deleting partition: "..err2)
+                    return
+                end
+                ok2.delete()
+                selectedPartition = nil
+                print("Partition deleted successfully.")
+            else
+                print("STORAGE - Delete the selected storage.")
+                print("PARTITION - Delete the selected partition.")
+                return
+            end
+        end
     }
 }
 

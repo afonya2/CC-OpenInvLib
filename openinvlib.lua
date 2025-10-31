@@ -386,6 +386,9 @@ local function getStorage(id)
     ---@return string|nil
     strapi.removeStorage = function(strg)
         expect("removeStorage", 1, strg, "string")
+        if #storage[id].storages < 2 then
+            return nil, "Cannot remove the last storage"
+        end
         local found, idx = includes(storage[id].storages, strg)
         if not found then
             return nil, "Peripheral not found in this storage"
