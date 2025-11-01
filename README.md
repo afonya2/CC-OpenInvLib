@@ -223,7 +223,16 @@ Deletes the storage
 
 **Parameters**
 
+- force?: boolean: If it should care about partitions or not
+
 **Returns**
+
+- boolean: If the operation succeded
+
+or
+
+- nil
+- string: Explaining the error
 
 ## Partition object
 An object that represents a partition.
@@ -542,4 +551,13 @@ Deletes the partition
 
 **Parameters**
 
+- force?: boolean: If it should care about partitions or not
+
 **Returns**
+
+- boolean: If the operation succeded
+
+or
+
+- nil
+- string: Explaining the error

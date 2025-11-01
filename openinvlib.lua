@@ -1221,9 +1221,24 @@ local function getStorage(id)
             return baseToTransfer - toTransfer
         end
         ---Deletes the partition
-        parapi.delete = function()
+        ---@param force boolean|nil
+        ---@return boolean|nil
+        ---@return string|nil
+        parapi.delete = function(force)
+            expect("delete", 1, force, "boolean", "nil")
+
+            if not force then
+                local list = strapi._internal.list()
+                local s, e = parapi.getPositions()
+                for i=s, e do
+                    if list[i] ~= nil then
+                        return nil, "Cannot safely delete partition, items would be lost"
+                    end
+                end
+            end
             table.remove(storage[id].partitions, partId)
             saveFile("openinvlib_data/storage.txt", storage)
+            return true
         end
         return parapi
     end
@@ -1390,9 +1405,18 @@ local function getStorage(id)
         return baseToTransfer - toTransfer
     end
     ---Deletes the storage
-    strapi.delete = function()
+    ---@param force boolean|nil
+    ---@return boolean|nil
+    ---@return string|nil
+    strapi.delete = function(force)
+        expect("delete", 1, force, "boolean", "nil")
+
+        if (#storage[id].partitions > 0) and (not force) then
+            return nil, "Cannot safely delete storage as it still has partitions."
+        end
         table.remove(storage, id)
         saveFile("openinvlib_data/storage.txt", storage)
+        return true
     end
 
     return strapi

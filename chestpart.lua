@@ -50,23 +50,29 @@ local function makeTable(rows)
             if colPos[j].y > (colPos[j-1] and colPos[j-1].y or 1) then
                 if i == 1 then
                     str = str .. "\n"
+                    if (colPos[j-1] and colPos[j-1].y or 1) > 1 then
+                        str = str .. " "
+                    end
                     for l = 1, j-1 do
                         str = str .. string.rep("-", colSizes[l]) .. "  "
                     end
                     alp = j
                 end
-                str = str .. "\n"
+                str = str .. "\n "
             end
             str = str .. tostring(rows[i][j]) .. string.rep(" ", missing + 2)
         end
         if i == 1 then
             str = str .. "\n"
+            if colPos[#colPos].y > 1 then
+                str = str .. " "
+            end
             for l = alp, #rows[i] do
                 str = str .. string.rep("-", colSizes[l]) .. "  "
             end
         end
         print(str)
-        if i > 5 then
+        if i > 3 then
             io.read()
             local cx, cy = term.getCursorPos()
             term.setCursorPos(1, cy - 1)
@@ -474,7 +480,17 @@ local commands = {
                     print("Error deleting storage: "..err)
                     return
                 end
-                ok.delete()
+                local ok2, err2 = ok.delete()
+                if not ok2 then
+                    print(err2)
+                    term.write("Continue anyways? (y/n): ")
+                    local resp2 = io.read()
+                    if not startsWith("yes", resp2:lower()) then
+                        print("Operation cancelled.")
+                        return
+                    end
+                    ok.delete(true)
+                end
                 selectedStorage = nil
                 selectedPartition = nil
                 print("Storage deleted successfully.")
@@ -505,7 +521,17 @@ local commands = {
                     print("Error deleting partition: "..err2)
                     return
                 end
-                ok2.delete()
+                local ok3, err3 = ok2.delete()
+                if not ok3 then
+                    print(err3)
+                    term.write("Continue anyways? (y/n): ")
+                    local resp2 = io.read()
+                    if not startsWith("yes", resp2:lower()) then
+                        print("Operation cancelled.")
+                        return
+                    end
+                    ok2.delete(true)
+                end
                 selectedPartition = nil
                 print("Partition deleted successfully.")
             else
