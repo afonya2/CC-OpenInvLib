@@ -920,6 +920,16 @@ local commands = {
             }
             makeTable(rows)
         end
+    },
+    {
+        name = "restart",
+        description = "Restart Open Inventory Library.",
+        usage = {},
+        onRun = function(command, args)
+            shell.run("oil.lua")
+            oil = openInvLib
+            print("Open Inventory Library restarted.")
+        end
     }
 }
 

@@ -1068,11 +1068,11 @@ local function getStorage(id)
                             if vv and matchItem(v, vv) and (v.count < v.maxCount) then
                                 local oldVV = copy(vv)
                                 local toMove = math.min(vv.count, v.maxCount - v.count)
-                                local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(k)
+                                local chest, realSlot, slotInStorage = parapi._internal.getRealSlot(k)
                                 if not chest then
                                     break
                                 end
-                                local ok = parapi._internal.pushItems(chest, kk, toMove, k)
+                                local ok = parapi._internal.pushItems(chest, kk, toMove, realSlot)
                                 if ok then
                                     itemsMoved = itemsMoved + ok
                                     if oldVV.count <= ok then
@@ -1094,11 +1094,11 @@ local function getStorage(id)
                     for j = parapi.getSize(), i, -1 do
                         local vv = list[j]
                         if vv ~= nil then
-                            local chest, realFromSlot, slotInStorage = parapi._internal.getRealSlot(i)
+                            local chest, realSlot, slotInStorage = parapi._internal.getRealSlot(i)
                             if not chest then
                                 break
                             end
-                            local ok = parapi._internal.pushItems(chest, j, vv.count, i)
+                            local ok = parapi._internal.pushItems(chest, j, vv.count, realSlot)
                             if ok ~= nil then
                                 if ok >= vv.count then
                                     slotsFreed = slotsFreed + 1
