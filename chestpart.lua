@@ -672,7 +672,7 @@ local commands = {
         },
         onRun = function(command, args)
             if #args < 1 then
-                print("MOVE <NEW START POS> - Move the selected partition to a new start position.")
+                print("<NEW START POS> - Move the selected partition to a new start position.")
                 return
             end
             if selectedStorage == nil then
@@ -714,7 +714,7 @@ local commands = {
         },
         onRun = function(command, args)
             if #args < 1 then
-                print("RESIZE <NEW SIZE> - Resize the selected partition to a new size.")
+                print("<NEW SIZE> - Resize the selected partition to a new size.")
                 return
             end
             if selectedStorage == nil then
@@ -761,6 +761,164 @@ local commands = {
                 end
             end
             print("Partition resized successfully.")
+        end
+    },
+    {
+        name = "item",
+        description = "Import, export, and move items.",
+        usage = {
+            {
+                { "import", "<query>", "<from name>", "<limit>" },
+                { "export", "<query>", "<to name>", "<limit>" },
+                { "move", "<query>", "<storage id>", "<partition id>", "<limit>" }
+            },
+        },
+        onRun = function(command, args)
+            if #args < 4 then
+                print("IMPORT <QUERY> <FROM NAME> <LIMIT> - Import items matching the query from the specified inventory.")
+                print("EXPORT <QUERY> <TO NAME> <LIMIT> - Export items matching the query to the specified inventory.")
+                print("MOVE <QUERY> <STORAGE ID> <PARTITION ID> <LIMIT> - Move items matching the query to the specified storage and partition.")
+                return
+            end
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error resizing partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error resizing partition: "..err2)
+                return
+            end
+            local action = args[1]:lower()
+            local query = args[2]
+            if action == "import" then
+                local fromName = args[3]
+                local limit = tonumber(args[4])
+                if limit == nil then
+                    print("Invalid limit.")
+                    return
+                end
+                local ok3, err3 = ok2.importItems(query, fromName, limit)
+                if not ok3 then
+                    print("Error importing items: "..err3)
+                    return
+                end
+                print("Imported "..ok3.." items.")
+            elseif action == "export" then
+                local toName = args[3]
+                local limit = tonumber(args[4])
+                if limit == nil then
+                    print("Invalid limit.")
+                    return
+                end
+                local ok3, err3 = ok2.exportItems(query, toName, limit)
+                if not ok3 then
+                    print("Error exporting items: "..err3)
+                    return
+                end
+                print("Exported "..ok3.." items.")
+            elseif action == "move" then
+                if #args < 5 then
+                    print("MOVE <QUERY> <STORAGE ID> <PARTITION ID> <LIMIT> - Move items matching the query to the specified storage and partition.")
+                    return
+                end
+                local storageId = tonumber(args[3])
+                if storageId == nil then
+                    print("Invalid storage ID.")
+                    return
+                end
+                local partitionId = tonumber(args[4])
+                if partitionId == nil then
+                    print("Invalid partition ID.")
+                    return
+                end
+                local limit = tonumber(args[5])
+                if limit == nil then
+                    print("Invalid limit.")
+                    return
+                end
+                local ok3, err3 = ok2.moveItems(query, storageId, partitionId, limit)
+                if not ok3 then
+                    print("Error moving items: "..err3)
+                    return
+                end
+                print("Moved "..ok3.." items.")
+            end
+        end
+    },
+    {
+        name = "defragment",
+        description = "Defragment the selected partition.",
+        usage = {},
+        onRun = function(command, args)
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error resizing partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error resizing partition: "..err2)
+                return
+            end
+            local moved, freed = ok2.defragment()
+            print("Defragmentation complete. "..moved.." items moved, "..freed.." slots freed.")
+        end
+    },
+    {
+        name = "info",
+        description = "Display information about the selected partition.",
+        usage = {},
+        onRun = function(command, args)
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error resizing partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error resizing partition: "..err2)
+                return
+            end
+            local data = ok2.getUsage()
+            local rows = {
+                {"Key", "Value"},
+                {"Storage Name", ok.getName() or "Unknown"},
+                {"Partition Name", ok2.getName() or "Unknown"},
+                {"Total Items", data.totalItems},
+                {"Full Slots", data.fullSlots},
+                {"Used Slots", data.usedSlots},
+                {"Total Slots", data.totalSlots},
+                {"Compression", ok2.isCompressed() and "*" or ""},
+                {"Storage ID", selectedStorage},
+                {"Partition ID", selectedPartition}
+            }
+            makeTable(rows)
         end
     }
 }
