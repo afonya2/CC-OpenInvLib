@@ -88,15 +88,18 @@ local commands = {
         usage = {
             {
                 { "storage" },
-                { "inventory" },
-                { "partition" }
+                { "inventory", "all" },
+                { "partition" },
+                { "items" }
             }
         },
         onRun = function(command, args)
             if #args < 1 then
                 print("STORAGE - Display a list of storages.")
                 print("INVENTORY - Display the inventories of the selected storage.")
+                print("INVENTORY ALL - Display all connected inventories.")
                 print("PARTITION - Display a list of partitions in the selected storage.")
+                print("ITEMS - Display a list of items in the selected partition.")
                 return
             end
             local subcmd = args[1]:lower()
@@ -118,23 +121,50 @@ local commands = {
                 end
                 makeTable(rows)
             elseif subcmd == "inventory" then
-                if selectedStorage == nil then
-                    print("No storage selected.")
-                    return
+                if #args < 2 then
+                    if selectedStorage == nil then
+                        print("No storage selected.")
+                        return
+                    end
+                    local ok, err = oil.getStorage(selectedStorage)
+                    if not ok then
+                        print("Error: "..err)
+                        return
+                    end
+                    local inventories = ok.getStorages()
+                    local rows = {
+                        {"Name"}
+                    }
+                    for _, inv in pairs(inventories) do
+                        table.insert(rows, {inv})
+                    end
+                    makeTable(rows)
+                else
+                    local rows = {
+                        {"Name", "Used"}
+                    }
+                    local usedStrs = {}
+                    for i=1,2^16 do
+                        local ok,err = oil.getStorage(i)
+                        if ok then
+                            for k,v in ipairs(ok.getStorages()) do
+                                usedStrs[v] = true
+                            end
+                        else
+                            if err == "Storage not found" then
+                                break
+                            end
+                        end
+                    end
+                    local periphs = peripheral.getNames()
+                    for _, n in pairs(periphs) do
+                        local t1, t2 = peripheral.getType(n)
+                        if t2 == "inventory" then
+                            table.insert(rows, {n, (usedStrs[n] and "*" or "")})
+                        end
+                    end
+                    makeTable(rows)
                 end
-                local ok, err = oil.getStorage(selectedStorage)
-                if not ok then
-                    print("Error: "..err)
-                    return
-                end
-                local inventories = ok.getStorages()
-                local rows = {
-                    {"Name"}
-                }
-                for _, inv in pairs(inventories) do
-                    table.insert(rows, {inv})
-                end
-                makeTable(rows)
             elseif subcmd == "partition" then
                 if selectedStorage == nil then
                     print("No storage selected.")
@@ -157,9 +187,39 @@ local commands = {
                     end
                 end
                 makeTable(rows)
+            elseif subcmd == "items" then
+                if selectedStorage == nil then
+                    print("No storage selected.")
+                    return
+                end
+                if selectedPartition == nil then
+                    print("No partition selected.")
+                    return
+                end
+                local ok, err = oil.getStorage(selectedStorage)
+                if not ok then
+                    print("Error: "..err)
+                    return
+                end
+                local ok2, err2 = ok.getPartition(selectedPartition)
+                if not ok2 then
+                    print("Error: "..err2)
+                    return
+                end
+                local rows = {
+                    {"Name", "Display Name", "Count", "Max Stack", "Nbt"}
+                }
+                local items = ok2.listItems()
+                for k,v in pairs(items) do
+                    table.insert(rows, {v.name or "Unknown", v.displayName or "Unknown", v.count or 0, v.maxCount or 0, (v.nbt and v.nbt:sub(1, 5).."..." or "")})
+                end
+                makeTable(rows)
             else
                 print("STORAGE - Display a list of storages.")
+                print("INVENTORY - Display the inventories of the selected storage.")
+                print("INVENTORY ALL - Display all connected inventories.")
                 print("PARTITION - Display a list of partitions in the selected storage.")
+                print("ITEMS - Display a list of items in the selected partition.")
                 return
             end
         end
@@ -235,13 +295,17 @@ local commands = {
         },
         onRun = function(command, args)
             if #args < 1 then
-                print("INVENTORY - Rescan the inventory.")
+                print("INVENTORY (<NAME>/ALL) - Rescan an inventory.")
                 print("PERIPHERALS - Rescan the peripherals.")
                 print("ALL - Rescan both the inventory and peripherals.")
                 return
             end
             local target = args[1]:lower()
             if target == "inventory" then
+                if #args < 2 then
+                    print("Please specify a peripheral name or 'all'.")
+                    return
+                end
                 if startsWith("all", args[2]) then
                     oil.scanStorages()
                 elseif args[2] ~= nil then
@@ -539,6 +603,164 @@ local commands = {
                 print("PARTITION - Delete the selected partition.")
                 return
             end
+        end
+    },
+    {
+        name = "compress",
+        description = "Compress; enable or disable compression on the selected partition.",
+        usage = {
+            {
+                { "enable" },
+                { "disable" }
+            }
+        },
+        onRun = function(command, args)
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error deleting partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error deleting partition: "..err2)
+                return
+            end
+            if #args < 1 then
+                if not ok2.isCompressed() then
+                    print("Compression is not enabled for the selected partition.")
+                    return
+                end
+                local before, after, err = ok2.autoCompress()
+                if not before then
+                    print("Error during compression: "..err)
+                    return
+                end
+                print("Compression successful. " .. before .. " items compressed into " .. after .. " items.")
+            else
+                local action = args[1]:lower()
+                if action == "enable" then
+                    if ok2.isCompressed() then
+                        print("Compression is already enabled for the selected partition.")
+                        return
+                    end
+                    ok2.setCompressed(true)
+                    print("Compression enabled for the selected partition.")
+                elseif action == "disable" then
+                    if not ok2.isCompressed() then
+                        print("Compression is already disabled for the selected partition.")
+                        return
+                    end
+                    ok2.setCompressed(false)
+                    print("Compression disabled for the selected partition.")
+                end
+            end
+        end
+    },
+    {
+        name = "move",
+        description = "Move a partition.",
+        usage = {
+            "<new start pos>"
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("MOVE <NEW START POS> - Move the selected partition to a new start position.")
+                return
+            end
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error moving partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error moving partition: "..err2)
+                return
+            end
+            local newStartPos = tonumber(args[1])
+            if newStartPos == nil then
+                print("Invalid new start position.")
+                return
+            end
+            local ok3, err3 = ok2.move(newStartPos)
+            if not ok3 then
+                print("Error moving partition: "..err3)
+                return
+            end
+            print("Partition moved successfully.")
+        end
+    },
+    {
+        name = "resize",
+        description = "Resize a partition.",
+        usage = {
+            "<new size>"
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("RESIZE <NEW SIZE> - Resize the selected partition to a new size.")
+                return
+            end
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error resizing partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error resizing partition: "..err2)
+                return
+            end
+            local newSize = tonumber(args[1])
+            if newSize == nil then
+                print("Invalid new size.")
+                return
+            end
+            local ok3, err3 = ok2.resize(newSize)
+            if not ok3 then
+                if err3 == "Cannot safely resize partition, items would be lost" then
+                    print("Resizing this partition will result in item loss.")
+                    term.write("Continue? (y/n): ")
+                    local resp = io.read()
+                    if not startsWith("yes", resp:lower()) then
+                        print("Operation cancelled.")
+                        return
+                    end
+                    local ok4, err4 = ok2.resize(newSize, true)
+                    if not ok4 then
+                        print("Error resizing partition: "..err4)
+                        return
+                    end
+                else
+                    print("Error resizing partition: "..err3)
+                    return
+                end
+            end
+            print("Partition resized successfully.")
         end
     }
 }
