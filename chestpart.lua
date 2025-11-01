@@ -96,7 +96,7 @@ local commands = {
         onRun = function(command, args)
             if #args < 1 then
                 print("STORAGE - Display a list of storages.")
-                print("INVENTORY - Display the inventories of the selected storage.")
+                print("INVENTORY <NAME> - Display the inventories of the selected storage.")
                 print("INVENTORY ALL - Display all connected inventories.")
                 print("PARTITION - Display a list of partitions in the selected storage.")
                 print("ITEMS - Display a list of items in the selected partition.")
@@ -216,7 +216,7 @@ local commands = {
                 makeTable(rows)
             else
                 print("STORAGE - Display a list of storages.")
-                print("INVENTORY - Display the inventories of the selected storage.")
+                print("INVENTORY <NAME> - Display the inventories of the selected storage.")
                 print("INVENTORY ALL - Display all connected inventories.")
                 print("PARTITION - Display a list of partitions in the selected storage.")
                 print("ITEMS - Display a list of items in the selected partition.")

@@ -2,7 +2,7 @@
 A modern inventory library for the CC: Tweaked Minecraft mod.
 
 ## Installing
-run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/main/openinvlib.lua oil.lua` on a computer.
+Run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/main/openinvlib.lua oil.lua` on a computer.
 
 > [!NOTE]  
 > OIL stores its configuration and cache in the `openinvlib_data` folder
@@ -12,6 +12,11 @@ run `wget https://raw.githubusercontent.com/afonya2/CC-OpenInvLib/refs/heads/mai
 - inventory: A peripheral that has an inventory (chest, furnace)
 - storage: Multiple inventories joined together
 - partition: A section of a storage, is capable of storing items
+
+## ChestPart
+ChestPart is a command line utility for OIL.
+
+The documentation of it can be found [here](https://github.com/afonya2/CC-OpenInvLib/blob/main/chestpart-docs.md)
 
 ## Documentation
 > [!WARNING]  
