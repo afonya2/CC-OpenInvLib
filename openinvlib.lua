@@ -159,6 +159,94 @@ local compressionInfo = {
                 {"x"}
             }
         }
+    },
+    ["minecraft:copper_block?displayName=Block of Copper"] = {
+        item = "minecraft:copper_ingot?displayName=Copper Ingot",
+        ratio = 9,
+        craft = {
+            items = {
+                x = "minecraft:copper_ingot?displayName=Copper Ingot"
+            },
+            pattern = {
+                {"x", "x", "x"},
+                {"x", "x", "x"},
+                {"x", "x", "x"}
+            }
+        },
+        reverseCraft = {
+            items = {
+                x = "minecraft:copper_block?displayName=Block of Copper"
+            },
+            pattern = {
+                {"x"}
+            }
+        }
+    },
+    ["minecraft:iron_block?displayName=Block of Iron"] = {
+        item = "minecraft:iron_ingot?displayName=Iron Ingot",
+        ratio = 9,
+        craft = {
+            items = {
+                x = "minecraft:iron_ingot?displayName=Iron Ingot"
+            },
+            pattern = {
+                {"x", "x", "x"},
+                {"x", "x", "x"},
+                {"x", "x", "x"}
+            }
+        },
+        reverseCraft = {
+            items = {
+                x = "minecraft:iron_block?displayName=Block of Iron"
+            },
+            pattern = {
+                {"x"}
+            }
+        }
+    },
+    ["minecraft:diamond_block?displayName=Block of Diamond"] = {
+        item = "minecraft:diamond?displayName=Diamond",
+        ratio = 9,
+        craft = {
+            items = {
+                x = "minecraft:diamond?displayName=Diamond"
+            },
+            pattern = {
+                {"x", "x", "x"},
+                {"x", "x", "x"},
+                {"x", "x", "x"}
+            }
+        },
+        reverseCraft = {
+            items = {
+                x = "minecraft:diamond_block?displayName=Block of Diamond"
+            },
+            pattern = {
+                {"x"}
+            }
+        }
+    },
+    ["minecraft:emerald_block?displayName=Block of Emerald"] = {
+        item = "minecraft:emerald?displayName=Emerald",
+        ratio = 9,
+        craft = {
+            items = {
+                x = "minecraft:emerald?displayName=Emerald"
+            },
+            pattern = {
+                {"x", "x", "x"},
+                {"x", "x", "x"},
+                {"x", "x", "x"}
+            }
+        },
+        reverseCraft = {
+            items = {
+                x = "minecraft:emerald_block?displayName=Block of Emerald"
+            },
+            pattern = {
+                {"x"}
+            }
+        }
     }
 }
 
