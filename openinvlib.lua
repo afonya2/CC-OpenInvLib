@@ -1,7 +1,7 @@
 -- Open Inventory Library (OIL)
 -- Source: https://github.com/afonya2/CC-OpenInvLib
 -- Made by: Afonya (afonya2 on github)
--- Last Updated: 2025-11-01 18:30 UTC
+-- Last Updated: 2025-11-01 20:15 UTC
 -- License: MIT, you must include the above text into every copies of this file
 local function loadFile(filename)
     local fa = fs.open(filename, "r")
@@ -819,8 +819,9 @@ local function getStorage(id)
             expect("canImport", 1, query, "string")
             expect("canImport", 2, limit, "number", "nil")
 
+            limit = limit or (2^40)
             local list = parapi.list()
-            local toTransfer = limit or (2^40)
+            local toTransfer = limit
             local transferred = 0
             for k=1,parapi.getSize() do
                 local v = list[k]
@@ -848,9 +849,9 @@ local function getStorage(id)
         ---@param outcome string
         ---@param outcomeCount number
         ---@param count number|nil
-        ---@return boolean|nil
+        ---@return number|nil
         ---@return string|nil
-        parapi.craft = function(key, pattern, outcome, outcomeCount, count)
+        parapi.craft = function(key, pattern, outcome, outcomeCount, count, noCompression)
             if (not turtle) or (not turtle.craft) then
                 return nil, "Crafting is only supported on crafty turtles"
             end
@@ -867,66 +868,55 @@ local function getStorage(id)
             expect("craft", 3, outcome, "string")
             expect("craft", 4, outcomeCount, "number")
             expect("craft", 5, count, "number", "nil")
+            expect("craft", 6, noCompression, "boolean", "nil")
 
             if (type(count) == "number") and (count == 0) then
-                return true
+                return 0
             end
-            count = count or 1
+            count = math.max(count or 1, 1)
 
-            if parapi.canImport(outcome, outcomeCount * count) < count then
-                return nil, "Not enough space to import crafted items"
-            end
-            local neededItems = {}
-            for i = 1, 3 do
-                if pattern[i] then
-                    for j = 1, 3 do
-                        if pattern[i][j] then
-                            local item = key[pattern[i][j]]
-                            if not item then
-                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
+            if (not noCompression) and (storage[id].partitions[partId].isCompressed) then
+                local neededItems = {}
+                for i = 1, 3 do
+                    if pattern[i] then
+                        for j = 1, 3 do
+                            if pattern[i][j] then
+                                local item = key[pattern[i][j]]
+                                if not item then
+                                    return nil, "Missing crafting ingredient: " .. pattern[i][j]
+                                end
+                                if neededItems[item] then
+                                    neededItems[item] = neededItems[item] + count
+                                else
+                                    neededItems[item] = count
+                                end
                             end
-                            if neededItems[item] then
-                                neededItems[item] = neededItems[item] + count
-                            else
-                                neededItems[item] = count
+                        end
+                    end
+                end
+                for k, v in pairs(neededItems) do
+                    if parapi.getItemCount(k, true) < v then
+                        local crafted, avail, err = parapi.decompressItems(k, v)
+                        if crafted then
+                            if avail < v then
+                                return nil, "Not enough of item: " .. k .. " (need " .. v-avail .. " more)"
                             end
                         end
                     end
                 end
             end
-            for k, v in pairs(neededItems) do
-                local ic = parapi.getItemCount(k, true)
-                if ic < v then
-                    return nil, "Not enough of item: " .. k .. " (need " .. v-ic .. " more)"
+
+            local toCraft = count
+            local crafted = 0
+            while toCraft > 0 do
+                local ok, err = parapi._internal.craft(key, pattern, outcome, outcomeCount, math.min(toCraft, 64))
+                if not ok then
+                    return nil, err
                 end
+                crafted = crafted + math.min(toCraft, 64) * outcomeCount
+                toCraft = toCraft - math.min(toCraft, 64)
             end
-            local craftSlots = {1,2,3,5,6,7,9,10,11}
-            for i = 1, 3 do
-                if pattern[i] then
-                    for j = 1, 3 do
-                        if pattern[i][j] then
-                            local item = key[pattern[i][j]]
-                            if not item then
-                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
-                            end
-                            local ok,err = parapi.exportItems(item, turtleName, count, true, craftSlots[(i-1)*3 + j])
-                            if not ok then
-                                return nil, err
-                            end
-                        end
-                    end
-                end
-            end
-            local ok, err = turtle.craft()
-            if not ok then
-                return nil, err
-            end
-            scanStorage(turtleName)
-            local ok2,err2 = parapi.importItems(outcome, turtleName, outcomeCount * count, true)
-            if not ok2 then
-                return nil, err2
-            end
-            return true
+            return crafted
         end
         ---Exports items matching the query to another inventory
         ---@param query string
@@ -1127,7 +1117,7 @@ local function getStorage(id)
                         if cInfo then
                             if matchQueries(cInfo.item, query) then
                                 local crafty = math.min(parapi.getItemCount(getItemQuery(v), true), math.ceil(toTransfer / cInfo.ratio))
-                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty)
+                                local ok,err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty, true)
                                 if ok then
                                     local c, err2 = parapi.moveItems(query, toStorage, toPartition, toTransfer, true)
                                     if not c then
@@ -1135,6 +1125,9 @@ local function getStorage(id)
                                     end
                                     toTransfer = toTransfer - c
                                     changed = changed + c
+                                    if toTransfer < 1 then
+                                        break
+                                    end
                                 end
                             end
                         end
@@ -1145,6 +1138,67 @@ local function getStorage(id)
                 toPart.autoCompress()
             end
             return changed
+        end
+        --- Makes sure that there are enough uncompressed items available matching the query
+        --- @param query string
+        --- @param limit number|nil
+        --- @return number|nil
+        --- @return number|nil
+        --- @return string|nil
+        parapi.decompressItems = function(query, limit)
+            if not storage[id].partitions[partId].isCompressed then
+                return nil, nil, "This partition does not support compression"
+            end
+            expect("decompressItems", 1, query, "string")
+            expect("decompressItems", 2, limit, "number", "nil")
+
+            limit = limit or (2^40)
+            local toCompress = limit
+            local changed = 0
+            local avail = 0
+            local found = false
+            for k, v in pairs(compressionInfo) do
+                if matchQueries(v.item, query) then
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                return nil, nil, "Item is not compressible"
+            end
+            local list = parapi.list()
+            for k, v in pairs(list) do
+                if matchItemQuery(v, query) then
+                    toCompress = toCompress - v.count
+                    avail = math.min(limit, avail + v.count)
+                    if toCompress < 1 then
+                        break
+                    end
+                end
+            end
+            if toCompress > 0 then
+                list = parapi.list()
+                for k, v in pairs(list) do
+                    if compressionInfo[getItemQuery(v)] then
+                        local cInfo = compressionInfo[getItemQuery(v)]
+                        if cInfo then
+                            if matchQueries(cInfo.item, query) then
+                                local crafty = math.min(parapi.getItemCount(getItemQuery(v), true), math.ceil(toCompress / cInfo.ratio))
+                                local ok, err = parapi.craft(cInfo.reverseCraft.items, cInfo.reverseCraft.pattern, cInfo.item, cInfo.ratio, crafty, true)
+                                if ok then
+                                    toCompress = toCompress - ok
+                                    changed = changed + ok
+                                    avail = math.min(limit, avail + ok)
+                                    if toCompress < 1 then
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            return changed, avail
         end
         ---Defragments the partition
         ---@return number
@@ -1219,7 +1273,7 @@ local function getStorage(id)
                 local ic = parapi.getItemCount(v.item, true)
                 local craftable = math.floor(ic / v.ratio)
                 if craftable > 0 then
-                    local ok = parapi.craft(v.craft.items, v.craft.pattern, k, 1, craftable)
+                    local ok = parapi.craft(v.craft.items, v.craft.pattern, k, 1, craftable, true)
                     if ok then
                         baseCount = baseCount + (craftable * v.ratio)
                         compCount = compCount + craftable
@@ -1312,6 +1366,84 @@ local function getStorage(id)
                 end
             end
             return baseToTransfer - toTransfer
+        end
+        parapi._internal.craft = function(key, pattern, outcome, outcomeCount, count)
+            if (not turtle) or (not turtle.craft) then
+                return nil, "Crafting is only supported on crafty turtles"
+            end
+            if not turtleName then
+                return nil, "A wired modem must be placed around the turtle"
+            end
+            for i = 1, 16 do
+                if turtle.getItemCount(i) > 0 then
+                    return nil, "The turtle's inventory must be empty"
+                end
+            end
+            expect("craft", 1, key, "table")
+            expect("craft", 2, pattern, "table")
+            expect("craft", 3, outcome, "string")
+            expect("craft", 4, outcomeCount, "number")
+            expect("craft", 5, count, "number", "nil")
+
+            if (type(count) == "number") and (count == 0) then
+                return true
+            end
+            count = math.max(count or 1, 1)
+
+            if parapi.canImport(outcome, outcomeCount * count) < count then
+                return nil, "Not enough space to import crafted items"
+            end
+            local neededItems = {}
+            for i = 1, 3 do
+                if pattern[i] then
+                    for j = 1, 3 do
+                        if pattern[i][j] then
+                            local item = key[pattern[i][j]]
+                            if not item then
+                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
+                            end
+                            if neededItems[item] then
+                                neededItems[item] = neededItems[item] + count
+                            else
+                                neededItems[item] = count
+                            end
+                        end
+                    end
+                end
+            end
+            for k, v in pairs(neededItems) do
+                local ic = parapi.getItemCount(k, true)
+                if ic < v then
+                    return nil, "Not enough of item: " .. k .. " (need " .. v-ic .. " more)"
+                end
+            end
+            local craftSlots = {1,2,3,5,6,7,9,10,11}
+            for i = 1, 3 do
+                if pattern[i] then
+                    for j = 1, 3 do
+                        if pattern[i][j] then
+                            local item = key[pattern[i][j]]
+                            if not item then
+                                return nil, "Missing crafting ingredient: " .. pattern[i][j]
+                            end
+                            local ok,err = parapi.exportItems(item, turtleName, count, true, craftSlots[(i-1)*3 + j])
+                            if not ok then
+                                return nil, err
+                            end
+                        end
+                    end
+                end
+            end
+            local ok, err = turtle.craft()
+            if not ok then
+                return nil, err
+            end
+            scanStorage(turtleName)
+            local ok2,err2 = parapi.importItems(outcome, turtleName, outcomeCount * count, true)
+            if not ok2 then
+                return nil, err2
+            end
+            return true
         end
         ---Deletes the partition
         ---@param force boolean|nil

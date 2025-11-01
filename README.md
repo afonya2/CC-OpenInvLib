@@ -462,10 +462,13 @@ Crafts items using a crafty turtle
 - outcome: string: The query of the outcome
 - outcomeCount: number: The amount of items that get produced
 - count?: number: The amount of items wanted or `1`
+- noCompression?: boolean: If compression shouldn't be done
 
 **Returns**
 
-- boolean: If the operation succeded
+- number: The amount of items crafted
+> [!WARNING]  
+> This uses the provided outcomeCount and count variables, thus it might be inaccurate
 
 or
 
@@ -528,6 +531,27 @@ Moves items matching the query to another partition
 
 or
 
+- nil
+- string: Explaining the error
+
+### decompressItems
+Makes sure that there are enough uncompressed items available matching the query
+
+**Parameters**
+
+- query: string: The item query
+- limit?: number: The amount of items must be available
+
+**Returns**
+
+- number: The amount of items created by decompression
+> [!NOTE]  
+> This value might be higher than the limit
+- number: The amount of items available
+
+or
+
+- nil
 - nil
 - string: Explaining the error
 

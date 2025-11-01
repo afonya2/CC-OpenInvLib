@@ -88,6 +88,12 @@ DISABLE - Disable compression on the selected partition.
 (ln) - Run auto compression on the selected partition.
 ```
 
+### MAKE
+Makes sure that there are enough uncompressed items available matching the query.
+```
+<QUERY> <LIMIT> - Makes sure that there are enough uncompressed items available matching the query.
+```
+
 ### MOVE
 Move a partition.
 ```

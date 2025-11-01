@@ -1,7 +1,7 @@
 -- ChestPart command line utility for Open Inventory Library (OIL)
 -- Source: https://github.com/afonya2/CC-OpenInvLib
 -- Made by: Afonya (afonya2 on github)
--- Last Updated: 2025-11-01 18:30 UTC
+-- Last Updated: 2025-11-01 20:15 UTC
 -- License: MIT, you must include the above text into every copies of this file
 if openInvLib == nil then
     shell.run("oil.lua")
@@ -670,6 +670,55 @@ local commands = {
         end
     },
     {
+        name = "make",
+        description = "Makes sure that there are enough uncompressed items available matching the query.",
+        usage = {
+            "<query>", "<limit>"
+        },
+        onRun = function(command, args)
+            if #args < 1 then
+                print("<QUERY> <LIMIT> - Makes sure that there are enough uncompressed items available matching the query.")
+                return
+            end
+            if selectedStorage == nil then
+                print("No storage selected.")
+                return
+            end
+            if selectedPartition == nil then
+                print("No partition selected.")
+                return
+            end
+            local ok, err = oil.getStorage(selectedStorage)
+            if not ok then
+                print("Error moving partition: "..err)
+                return
+            end
+            local ok2, err2 = ok.getPartition(selectedPartition)
+            if not ok2 then
+                print("Error moving partition: "..err2)
+                return
+            end
+            if not ok2.isCompressed() then
+                print("Compression is not enabled for the selected partition.")
+                return
+            end
+            local limit = nil
+            if #args > 1 then
+                limit = tonumber(args[2])
+                if limit == nil then
+                    print("Invalid limit.")
+                    return
+                end
+            end
+            local crafted, avail, err3 = ok2.decompressItems(args[1], limit)
+            if not crafted then
+                print("Error decompressing items: "..err3)
+                return
+            end
+            print("Decompressed "..crafted.." items (now available: "..avail..").")
+        end
+    },
+    {
         name = "move",
         description = "Move a partition.",
         usage = {
@@ -779,7 +828,7 @@ local commands = {
             },
         },
         onRun = function(command, args)
-            if #args < 4 then
+            if #args < 3 then
                 print("IMPORT <QUERY> <FROM NAME> <LIMIT> - Import items matching the query from the specified inventory.")
                 print("EXPORT <QUERY> <TO NAME> <LIMIT> - Export items matching the query to the specified inventory.")
                 print("MOVE <QUERY> <STORAGE ID> <PARTITION ID> <LIMIT> - Move items matching the query to the specified storage and partition.")
@@ -807,10 +856,13 @@ local commands = {
             local query = args[2]
             if action == "import" then
                 local fromName = args[3]
-                local limit = tonumber(args[4])
-                if limit == nil then
-                    print("Invalid limit.")
-                    return
+                local limit = nil
+                if #args > 3 then
+                    limit = tonumber(args[4])
+                    if limit == nil then
+                        print("Invalid limit.")
+                        return
+                    end
                 end
                 local ok3, err3 = ok2.importItems(query, fromName, limit)
                 if not ok3 then
@@ -820,10 +872,13 @@ local commands = {
                 print("Imported "..ok3.." items.")
             elseif action == "export" then
                 local toName = args[3]
-                local limit = tonumber(args[4])
-                if limit == nil then
-                    print("Invalid limit.")
-                    return
+                local limit = nil
+                if #args > 3 then
+                    limit = tonumber(args[4])
+                    if limit == nil then
+                        print("Invalid limit.")
+                        return
+                    end
                 end
                 local ok3, err3 = ok2.exportItems(query, toName, limit)
                 if not ok3 then
@@ -832,7 +887,7 @@ local commands = {
                 end
                 print("Exported "..ok3.." items.")
             elseif action == "move" then
-                if #args < 5 then
+                if #args < 4 then
                     print("MOVE <QUERY> <STORAGE ID> <PARTITION ID> <LIMIT> - Move items matching the query to the specified storage and partition.")
                     return
                 end
@@ -846,10 +901,13 @@ local commands = {
                     print("Invalid partition ID.")
                     return
                 end
-                local limit = tonumber(args[5])
-                if limit == nil then
-                    print("Invalid limit.")
-                    return
+                local limit = nil
+                if #args > 4 then
+                    limit = tonumber(args[5])
+                    if limit == nil then
+                        print("Invalid limit.")
+                        return
+                    end
                 end
                 local ok3, err3 = ok2.moveItems(query, storageId, partitionId, limit)
                 if not ok3 then
