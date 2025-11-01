@@ -1,3 +1,8 @@
+-- ChestPart command line utility for Open Inventory Library (OIL)
+-- Source: https://github.com/afonya2/CC-OpenInvLib
+-- Made by: Afonya (afonya2 on github)
+-- Last Updated: 2025-11-01 18:30 UTC
+-- License: MIT, you must include the above text into every copies of this file
 if openInvLib == nil then
     shell.run("oil.lua")
 end
